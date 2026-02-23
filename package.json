@@ -1,0 +1,37 @@
+{
+  "name": "figma-cli",
+  "version": "1.0.0",
+  "description": "CLI for managing Figma design systems. Create variables, components, and more.",
+  "author": "Sil Bormüller",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "figma-cli": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "figma",
+    "design-system",
+    "design-tokens",
+    "cli",
+    "variables"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/silships/figma-cli"
+  },
+  "homepage": "https://intodesignsystems.com",
+  "bugs": {
+    "url": "https://github.com/silships/figma-cli/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "ora": "^8.0.0"
+  }
+}

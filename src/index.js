@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
 
-const CONFIG_DIR = join(homedir(), '.figma-cli');
+const CONFIG_DIR = join(homedir(), '.figma-ds-cli');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 const program = new Command();
@@ -62,7 +62,7 @@ function checkConnection() {
   if (!result || result.includes('Not connected')) {
     console.log(chalk.red('\n✗ Not connected to Figma\n'));
     console.log(chalk.white('  Make sure Figma is running with remote debugging:'));
-    console.log(chalk.cyan('  figma-cli connect\n'));
+    console.log(chalk.cyan('  figma-ds-cli connect\n'));
     process.exit(1);
   }
   return true;
@@ -99,20 +99,163 @@ function hexToRgb(hex) {
 }
 
 program
-  .name('figma-cli')
+  .name('figma-ds-cli')
   .description('CLI for managing Figma design systems')
   .version(pkg.version);
+
+// Default action when no command is given
+program.action(async () => {
+  const config = loadConfig();
+
+  // First time? Run init
+  if (!config.patched || !checkDependencies(true)) {
+    showBanner();
+    console.log(chalk.white('  Welcome! Let\'s get you set up.\n'));
+    console.log(chalk.gray('  This takes about 30 seconds. No API key needed.\n'));
+
+    // Step 1: Check Node version
+    console.log(chalk.blue('Step 1/4: ') + 'Checking Node.js...');
+    const nodeVersion = process.version;
+    const nodeMajor = parseInt(nodeVersion.slice(1).split('.')[0]);
+    if (nodeMajor < 18) {
+      console.log(chalk.red(`  ✗ Node.js ${nodeVersion} is too old. Please upgrade to Node 18+`));
+      process.exit(1);
+    }
+    console.log(chalk.green(`  ✓ Node.js ${nodeVersion}`));
+
+    // Step 2: Install figma-use
+    console.log(chalk.blue('\nStep 2/4: ') + 'Installing dependencies...');
+    if (checkDependencies(true)) {
+      console.log(chalk.green('  ✓ figma-use already installed'));
+    } else {
+      const spinner = ora('  Installing figma-use...').start();
+      try {
+        execSync('npm install -g figma-use', { stdio: 'pipe' });
+        spinner.succeed('figma-use installed');
+      } catch (error) {
+        spinner.fail('Failed to install figma-use');
+        console.log(chalk.gray('  Try manually: npm install -g figma-use'));
+        process.exit(1);
+      }
+    }
+
+    // Step 3: Patch Figma
+    console.log(chalk.blue('\nStep 3/4: ') + 'Patching Figma Desktop...');
+    if (config.patched) {
+      console.log(chalk.green('  ✓ Figma already patched'));
+    } else {
+      console.log(chalk.gray('  (This allows CLI to connect to Figma)'));
+      const spinner = ora('  Patching...').start();
+      try {
+        execSync('figma-use patch', { stdio: 'pipe' });
+        config.patched = true;
+        saveConfig(config);
+        spinner.succeed('Figma patched');
+      } catch (error) {
+        if (error.message?.includes('already patched') || error.stderr?.includes('already patched')) {
+          config.patched = true;
+          saveConfig(config);
+          spinner.succeed('Figma already patched');
+        } else {
+          spinner.fail('Patch failed');
+          console.log(chalk.gray('  Try manually: figma-use patch'));
+        }
+      }
+    }
+
+    // Step 4: Start Figma
+    console.log(chalk.blue('\nStep 4/4: ') + 'Starting Figma...');
+    try {
+      execSync('pkill -x Figma 2>/dev/null || true', { stdio: 'pipe' });
+      await new Promise(r => setTimeout(r, 1000));
+      execSync('open -a Figma --args --remote-debugging-port=9222', { stdio: 'pipe' });
+      console.log(chalk.green('  ✓ Figma started'));
+
+      // Wait for connection
+      const spinner = ora('  Waiting for connection...').start();
+      let connected = false;
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const result = figmaUse('status', { silent: true });
+        if (result && result.includes('Connected')) {
+          connected = true;
+          break;
+        }
+      }
+
+      if (connected) {
+        spinner.succeed('Connected to Figma');
+      } else {
+        spinner.warn('Connection pending - open a file in Figma');
+      }
+    } catch (error) {
+      console.log(chalk.yellow('  ! Could not start Figma automatically'));
+      console.log(chalk.gray('    Start manually: open -a Figma --args --remote-debugging-port=9222'));
+    }
+
+    // Done!
+    console.log(chalk.green('\n  ✓ Setup complete!\n'));
+    showQuickStart();
+    return;
+  }
+
+  // Already set up - check connection and show status
+  showBanner();
+
+  const result = figmaUse('status', { silent: true });
+  if (result && result.includes('Connected')) {
+    console.log(chalk.green('  ✓ Connected to Figma\n'));
+    console.log(chalk.gray(result.trim().split('\n').map(l => '  ' + l).join('\n')));
+    console.log();
+    showQuickStart();
+  } else {
+    console.log(chalk.yellow('  ⚠ Figma not connected\n'));
+    console.log(chalk.white('  Starting Figma...'));
+    try {
+      execSync('pkill -x Figma 2>/dev/null || true', { stdio: 'pipe' });
+      await new Promise(r => setTimeout(r, 500));
+      execSync('open -a Figma --args --remote-debugging-port=9222', { stdio: 'pipe' });
+      console.log(chalk.green('  ✓ Figma started\n'));
+
+      const spinner = ora('  Waiting for connection...').start();
+      for (let i = 0; i < 8; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const res = figmaUse('status', { silent: true });
+        if (res && res.includes('Connected')) {
+          spinner.succeed('Connected to Figma\n');
+          showQuickStart();
+          return;
+        }
+      }
+      spinner.warn('Open a file in Figma to connect\n');
+      showQuickStart();
+    } catch {
+      console.log(chalk.gray('  Start manually: open -a Figma --args --remote-debugging-port=9222\n'));
+    }
+  }
+});
+
+function showQuickStart() {
+  console.log(chalk.white('  Quick start:\n'));
+  console.log(chalk.gray('    Create design system       ') + chalk.cyan('figma-ds-cli tokens ds'));
+  console.log(chalk.gray('    Create Tailwind colors     ') + chalk.cyan('figma-ds-cli tokens tailwind'));
+  console.log(chalk.gray('    List all variables         ') + chalk.cyan('figma-ds-cli var list'));
+  console.log(chalk.gray('    Render JSX to Figma        ') + chalk.cyan('figma-ds-cli render \'<Frame>...</Frame>\''));
+  console.log(chalk.gray('    See all commands           ') + chalk.cyan('figma-ds-cli --help'));
+  console.log();
+  console.log(chalk.gray('  Learn more: ') + chalk.cyan('https://intodesignsystems.com\n'));
+}
 
 // ============ WELCOME BANNER ============
 
 function showBanner() {
   console.log(chalk.cyan(`
-  ███████╗██╗ ██████╗ ███╗   ███╗ █████╗        ██████╗██╗     ██╗
-  ██╔════╝██║██╔════╝ ████╗ ████║██╔══██╗      ██╔════╝██║     ██║
-  █████╗  ██║██║  ███╗██╔████╔██║███████║█████╗██║     ██║     ██║
-  ██╔══╝  ██║██║   ██║██║╚██╔╝██║██╔══██║╚════╝██║     ██║     ██║
-  ██║     ██║╚██████╔╝██║ ╚═╝ ██║██║  ██║      ╚██████╗███████╗██║
-  ╚═╝     ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝       ╚═════╝╚══════╝╚═╝
+  ███████╗██╗ ██████╗ ███╗   ███╗ █████╗       ██████╗ ███████╗
+  ██╔════╝██║██╔════╝ ████╗ ████║██╔══██╗      ██╔══██╗██╔════╝
+  █████╗  ██║██║  ███╗██╔████╔██║███████║█████╗██║  ██║███████╗
+  ██╔══╝  ██║██║   ██║██║╚██╔╝██║██╔══██║╚════╝██║  ██║╚════██║
+  ██║     ██║╚██████╔╝██║ ╚═╝ ██║██║  ██║      ██████╔╝███████║
+  ╚═╝     ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝      ╚═════╝ ╚══════╝
 `));
   console.log(chalk.white(`  Design System CLI for Figma ${chalk.gray('v' + pkg.version)}`));
   console.log(chalk.gray(`  by Sil Bormüller • intodesignsystems.com\n`));
@@ -214,11 +357,11 @@ program
     console.log(chalk.green('\n  ✓ Setup complete!\n'));
 
     console.log(chalk.white('  Quick start:\n'));
-    console.log(chalk.gray('    Create Tailwind colors    ') + chalk.cyan('figma-cli tokens tailwind'));
-    console.log(chalk.gray('    Create spacing scale      ') + chalk.cyan('figma-cli tokens spacing'));
-    console.log(chalk.gray('    List all variables        ') + chalk.cyan('figma-cli var list'));
-    console.log(chalk.gray('    Render JSX to Figma       ') + chalk.cyan('figma-cli render \'<Frame>...</Frame>\''));
-    console.log(chalk.gray('    See all commands          ') + chalk.cyan('figma-cli --help'));
+    console.log(chalk.gray('    Create Tailwind colors    ') + chalk.cyan('figma-ds-cli tokens tailwind'));
+    console.log(chalk.gray('    Create spacing scale      ') + chalk.cyan('figma-ds-cli tokens spacing'));
+    console.log(chalk.gray('    List all variables        ') + chalk.cyan('figma-ds-cli var list'));
+    console.log(chalk.gray('    Render JSX to Figma       ') + chalk.cyan('figma-ds-cli render \'<Frame>...</Frame>\''));
+    console.log(chalk.gray('    See all commands          ') + chalk.cyan('figma-ds-cli --help'));
     console.log();
     console.log(chalk.gray('  Learn more: ') + chalk.cyan('https://intodesignsystems.com\n'));
   });
@@ -230,7 +373,7 @@ program
   .description('Setup Figma for CLI access (alias for init)')
   .action(() => {
     // Redirect to init
-    execSync('figma-cli init', { stdio: 'inherit' });
+    execSync('figma-ds-cli init', { stdio: 'inherit' });
   });
 
 // ============ STATUS ============
@@ -243,7 +386,7 @@ program
     const config = loadConfig();
     if (!config.patched && !checkDependencies(true)) {
       console.log(chalk.yellow('\n⚠ First time? Run the setup wizard:\n'));
-      console.log(chalk.cyan('  figma-cli init\n'));
+      console.log(chalk.cyan('  figma-ds-cli init\n'));
       return;
     }
     figmaUse('status');
@@ -259,7 +402,7 @@ program
     const config = loadConfig();
     if (!config.patched) {
       console.log(chalk.yellow('\n⚠ First time? Run the setup wizard:\n'));
-      console.log(chalk.cyan('  figma-cli init\n'));
+      console.log(chalk.cyan('  figma-ds-cli init\n'));
       return;
     }
 
@@ -495,6 +638,454 @@ Object.entries(radii).forEach(([name, value]) => {
     }
   });
 
+tokens
+  .command('import <file>')
+  .description('Import tokens from JSON file')
+  .option('-c, --collection <name>', 'Collection name')
+  .action((file, options) => {
+    checkConnection();
+
+    // Read JSON file
+    let tokensData;
+    try {
+      const content = readFileSync(file, 'utf8');
+      tokensData = JSON.parse(content);
+    } catch (error) {
+      console.log(chalk.red(`✗ Could not read file: ${file}`));
+      process.exit(1);
+    }
+
+    const spinner = ora('Importing tokens...').start();
+
+    // Detect format and convert
+    // Support: { "colors": { "primary": "#xxx" } } or { "primary": { "value": "#xxx", "type": "color" } }
+    const collectionName = options.collection || 'Imported Tokens';
+
+    const code = `
+const data = ${JSON.stringify(tokensData)};
+const collectionName = '${collectionName}';
+
+function hexToRgb(hex) {
+  const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+  if (!r) return null;
+  return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
+}
+
+function detectType(value) {
+  if (typeof value === 'string' && value.startsWith('#')) return 'COLOR';
+  if (typeof value === 'number') return 'FLOAT';
+  if (typeof value === 'boolean') return 'BOOLEAN';
+  return 'STRING';
+}
+
+function flattenTokens(obj, prefix = '') {
+  const result = [];
+  for (const [key, val] of Object.entries(obj)) {
+    const name = prefix ? prefix + '/' + key : key;
+    if (val && typeof val === 'object' && !val.value && !val.type) {
+      result.push(...flattenTokens(val, name));
+    } else {
+      const value = val?.value ?? val;
+      const type = val?.type?.toUpperCase() || detectType(value);
+      result.push({ name, value, type });
+    }
+  }
+  return result;
+}
+
+let col = figma.variables.getLocalVariableCollections().find(c => c.name === collectionName);
+if (!col) col = figma.variables.createVariableCollection(collectionName);
+const modeId = col.modes[0].modeId;
+
+const tokens = flattenTokens(data);
+let count = 0;
+
+tokens.forEach(({ name, value, type }) => {
+  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+  if (!existing) {
+    try {
+      const figmaType = type === 'COLOR' ? 'COLOR' : type === 'FLOAT' || type === 'NUMBER' ? 'FLOAT' : type === 'BOOLEAN' ? 'BOOLEAN' : 'STRING';
+      const v = figma.variables.createVariable(name, col.id, figmaType);
+      let figmaValue = value;
+      if (figmaType === 'COLOR') figmaValue = hexToRgb(value);
+      if (figmaValue !== null) {
+        v.setValueForMode(modeId, figmaValue);
+        count++;
+      }
+    } catch (e) {}
+  }
+});
+
+'Imported ' + count + ' tokens into ' + collectionName
+`;
+
+    try {
+      const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed(result?.trim() || 'Tokens imported');
+    } catch (error) {
+      spinner.fail('Failed to import tokens');
+      console.error(error.message);
+    }
+  });
+
+tokens
+  .command('ds')
+  .description('Create IDS Base Design System (complete starter kit)')
+  .action(async () => {
+    checkConnection();
+
+    console.log(chalk.cyan('\n  IDS Base Design System'));
+    console.log(chalk.gray('  by Into Design Systems\n'));
+
+    // IDS Base values
+    const idsColors = {
+      gray: { 50: '#fafafa', 100: '#f4f4f5', 200: '#e4e4e7', 300: '#d4d4d8', 400: '#a1a1aa', 500: '#71717a', 600: '#52525b', 700: '#3f3f46', 800: '#27272a', 900: '#18181b', 950: '#09090b' },
+      primary: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a', 950: '#172554' },
+      accent: { 50: '#fdf4ff', 100: '#fae8ff', 200: '#f5d0fe', 300: '#f0abfc', 400: '#e879f9', 500: '#d946ef', 600: '#c026d3', 700: '#a21caf', 800: '#86198f', 900: '#701a75', 950: '#4a044e' }
+    };
+
+    const idsSemanticColors = {
+      'background/default': '#ffffff',
+      'background/muted': '#f4f4f5',
+      'background/emphasis': '#18181b',
+      'foreground/default': '#18181b',
+      'foreground/muted': '#71717a',
+      'foreground/emphasis': '#ffffff',
+      'border/default': '#e4e4e7',
+      'border/focus': '#3b82f6',
+      'action/primary': '#3b82f6',
+      'action/primary-hover': '#2563eb',
+      'feedback/success': '#22c55e',
+      'feedback/success-muted': '#dcfce7',
+      'feedback/warning': '#f59e0b',
+      'feedback/warning-muted': '#fef3c7',
+      'feedback/error': '#ef4444',
+      'feedback/error-muted': '#fee2e2'
+    };
+
+    const idsSpacing = {
+      'xs': 4, 'sm': 8, 'md': 16, 'lg': 24, 'xl': 32, '2xl': 48, '3xl': 64
+    };
+
+    const idsTypography = {
+      'size/xs': 12, 'size/sm': 14, 'size/base': 16, 'size/lg': 18,
+      'size/xl': 20, 'size/2xl': 24, 'size/3xl': 30, 'size/4xl': 36,
+      'weight/normal': 400, 'weight/medium': 500, 'weight/semibold': 600, 'weight/bold': 700
+    };
+
+    const idsRadii = {
+      'none': 0, 'sm': 4, 'md': 8, 'lg': 12, 'xl': 16, 'full': 9999
+    };
+
+    // Create Color - Primitives
+    let spinner = ora('Creating Color - Primitives...').start();
+    const primitivesCode = `
+const colors = ${JSON.stringify(idsColors)};
+function hexToRgb(hex) {
+  const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+  return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
+}
+let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Color - Primitives');
+if (!col) col = figma.variables.createVariableCollection('Color - Primitives');
+const modeId = col.modes[0].modeId;
+let count = 0;
+Object.entries(colors).forEach(([colorName, shades]) => {
+  Object.entries(shades).forEach(([shade, hex]) => {
+    const existing = figma.variables.getLocalVariables().find(v => v.name === colorName + '/' + shade);
+    if (!existing) {
+      const v = figma.variables.createVariable(colorName + '/' + shade, col.id, 'COLOR');
+      v.setValueForMode(modeId, hexToRgb(hex));
+      count++;
+    }
+  });
+});
+count
+`;
+    try {
+      const result = figmaUse(`eval "${primitivesCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed(`Color - Primitives (${result?.trim() || '33'} variables)`);
+    } catch { spinner.fail('Color - Primitives failed'); }
+
+    // Create Color - Semantic
+    spinner = ora('Creating Color - Semantic...').start();
+    const semanticCode = `
+const colors = ${JSON.stringify(idsSemanticColors)};
+function hexToRgb(hex) {
+  const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+  return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
+}
+let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Color - Semantic');
+if (!col) col = figma.variables.createVariableCollection('Color - Semantic');
+const modeId = col.modes[0].modeId;
+let count = 0;
+Object.entries(colors).forEach(([name, hex]) => {
+  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+  if (!existing) {
+    const v = figma.variables.createVariable(name, col.id, 'COLOR');
+    v.setValueForMode(modeId, hexToRgb(hex));
+    count++;
+  }
+});
+count
+`;
+    try {
+      const result = figmaUse(`eval "${semanticCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed(`Color - Semantic (${result?.trim() || '13'} variables)`);
+    } catch { spinner.fail('Color - Semantic failed'); }
+
+    // Create Spacing
+    spinner = ora('Creating Spacing...').start();
+    const spacingCode = `
+const spacings = ${JSON.stringify(idsSpacing)};
+let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Spacing');
+if (!col) col = figma.variables.createVariableCollection('Spacing');
+const modeId = col.modes[0].modeId;
+let count = 0;
+Object.entries(spacings).forEach(([name, value]) => {
+  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+  if (!existing) {
+    const v = figma.variables.createVariable(name, col.id, 'FLOAT');
+    v.setValueForMode(modeId, value);
+    count++;
+  }
+});
+count
+`;
+    try {
+      const result = figmaUse(`eval "${spacingCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed(`Spacing (${result?.trim() || '7'} variables)`);
+    } catch { spinner.fail('Spacing failed'); }
+
+    // Create Typography
+    spinner = ora('Creating Typography...').start();
+    const typographyCode = `
+const typography = ${JSON.stringify(idsTypography)};
+let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Typography');
+if (!col) col = figma.variables.createVariableCollection('Typography');
+const modeId = col.modes[0].modeId;
+let count = 0;
+Object.entries(typography).forEach(([name, value]) => {
+  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+  if (!existing) {
+    const v = figma.variables.createVariable(name, col.id, 'FLOAT');
+    v.setValueForMode(modeId, value);
+    count++;
+  }
+});
+count
+`;
+    try {
+      const result = figmaUse(`eval "${typographyCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed(`Typography (${result?.trim() || '12'} variables)`);
+    } catch { spinner.fail('Typography failed'); }
+
+    // Create Border Radii
+    spinner = ora('Creating Border Radii...').start();
+    const radiiCode = `
+const radii = ${JSON.stringify(idsRadii)};
+let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Border Radii');
+if (!col) col = figma.variables.createVariableCollection('Border Radii');
+const modeId = col.modes[0].modeId;
+let count = 0;
+Object.entries(radii).forEach(([name, value]) => {
+  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+  if (!existing) {
+    const v = figma.variables.createVariable(name, col.id, 'FLOAT');
+    v.setValueForMode(modeId, value);
+    count++;
+  }
+});
+count
+`;
+    try {
+      const result = figmaUse(`eval "${radiiCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed(`Border Radii (${result?.trim() || '6'} variables)`);
+    } catch { spinner.fail('Border Radii failed'); }
+
+    // Small delay to let spinner render
+    await new Promise(r => setTimeout(r, 100));
+
+    // Summary
+    console.log(chalk.green('\n  ✓ IDS Base Design System created!\n'));
+    console.log(chalk.white('  Collections:'));
+    console.log(chalk.gray('    • Color - Primitives (gray, primary, accent)'));
+    console.log(chalk.gray('    • Color - Semantic (background, foreground, border, action, feedback)'));
+    console.log(chalk.gray('    • Spacing (xs to 3xl, 4px base)'));
+    console.log(chalk.gray('    • Typography (sizes + weights)'));
+    console.log(chalk.gray('    • Border Radii (none to full)'));
+    console.log();
+    console.log(chalk.gray('  Total: ~74 variables across 5 collections\n'));
+    console.log(chalk.gray('  Next: ') + chalk.cyan('figma-ds-cli tokens components') + chalk.gray(' to add UI components\n'));
+  });
+
+tokens
+  .command('components')
+  .description('Create IDS Base Components (Button, Input, Card, Badge)')
+  .action(async () => {
+    checkConnection();
+
+    console.log(chalk.cyan('\n  IDS Base Components'));
+    console.log(chalk.gray('  by Into Design Systems\n'));
+
+    // Component colors (using IDS Base values)
+    const colors = {
+      primary500: '#3b82f6',
+      primary600: '#2563eb',
+      gray100: '#f4f4f5',
+      gray200: '#e4e4e7',
+      gray500: '#71717a',
+      gray900: '#18181b',
+      white: '#ffffff',
+      success: '#22c55e',
+      warning: '#f59e0b',
+      error: '#ef4444'
+    };
+
+    // First, clean up any existing IDS components
+    let spinner = ora('Cleaning up existing components...').start();
+    const cleanupCode = `
+const names = ['Button / Primary', 'Button / Secondary', 'Button / Outline', 'Input', 'Card', 'Badge / Default', 'Badge / Success', 'Badge / Warning', 'Badge / Error'];
+let removed = 0;
+figma.currentPage.children.forEach(n => {
+  if (names.includes(n.name)) { n.remove(); removed++; }
+});
+removed
+`;
+    try {
+      const removed = figmaUse(`eval "${cleanupCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed(`Cleaned up ${removed?.trim() || '0'} old elements`);
+    } catch { spinner.succeed('Ready'); }
+
+    // Step 1: Create frames using JSX render (handles fonts)
+    spinner = ora('Creating frames...').start();
+    const jsxComponents = [
+      { jsx: `<Frame name="Button / Primary" bg="${colors.primary500}" px={16} py={10} rounded={8} flex="row"><Text size={14} weight="semibold" color="#ffffff">Button</Text></Frame>` },
+      { jsx: `<Frame name="Button / Secondary" bg="${colors.gray100}" px={16} py={10} rounded={8} flex="row"><Text size={14} weight="semibold" color="${colors.gray900}">Button</Text></Frame>` },
+      { jsx: `<Frame name="Button / Outline" bg="#ffffff" stroke="${colors.gray200}" px={16} py={10} rounded={8} flex="row"><Text size={14} weight="semibold" color="${colors.gray900}">Button</Text></Frame>` },
+      { jsx: `<Frame name="Input" w={200} bg="#ffffff" stroke="${colors.gray200}" px={12} py={10} rounded={8} flex="row"><Text size={14} color="${colors.gray500}">Placeholder</Text></Frame>` },
+      { jsx: `<Frame name="Card" bg="#ffffff" stroke="${colors.gray200}" p={24} rounded={12} flex="col" gap={8}><Text size={18} weight="semibold" color="${colors.gray900}">Card Title</Text><Text size={14} color="${colors.gray500}">Card description goes here.</Text></Frame>` },
+      { jsx: `<Frame name="Badge / Default" bg="${colors.gray100}" px={10} py={4} rounded={9999} flex="row"><Text size={12} weight="medium" color="${colors.gray900}">Badge</Text></Frame>` },
+      { jsx: `<Frame name="Badge / Success" bg="#dcfce7" px={10} py={4} rounded={9999} flex="row"><Text size={12} weight="medium" color="#166534">Success</Text></Frame>` },
+      { jsx: `<Frame name="Badge / Warning" bg="#fef3c7" px={10} py={4} rounded={9999} flex="row"><Text size={12} weight="medium" color="#92400e">Warning</Text></Frame>` },
+      { jsx: `<Frame name="Badge / Error" bg="#fee2e2" px={10} py={4} rounded={9999} flex="row"><Text size={12} weight="medium" color="#991b1b">Error</Text></Frame>` }
+    ];
+
+    try {
+      for (const { jsx } of jsxComponents) {
+        execSync(`echo '${jsx}' | figma-use render --stdin`, { stdio: 'pipe' });
+      }
+      spinner.succeed('9 frames created');
+    } catch (e) { spinner.fail('Frame creation failed'); }
+
+    // Step 2: Convert to components one by one with positioning
+    spinner = ora('Converting to components...').start();
+
+    const componentOrder = [
+      { name: 'Button / Primary', row: 0, width: 80, varFill: 'action/primary' },
+      { name: 'Button / Secondary', row: 0, width: 80, varFill: 'background/muted' },
+      { name: 'Button / Outline', row: 0, width: 80, varFill: 'background/default', varStroke: 'border/default' },
+      { name: 'Input', row: 0, width: 200, varFill: 'background/default', varStroke: 'border/default' },
+      { name: 'Card', row: 0, width: 240, varFill: 'background/default', varStroke: 'border/default' },
+      { name: 'Badge / Default', row: 1, width: 60, varFill: 'background/muted' },
+      { name: 'Badge / Success', row: 1, width: 70, varFill: 'feedback/success-muted' },
+      { name: 'Badge / Warning', row: 1, width: 70, varFill: 'feedback/warning-muted' },
+      { name: 'Badge / Error', row: 1, width: 50, varFill: 'feedback/error-muted' }
+    ];
+
+    let row0X = 0, row1X = 0;
+    const gap = 32;
+
+    for (const comp of componentOrder) {
+      const convertSingle = `
+const f = figma.currentPage.children.find(n => n.name === '${comp.name}' && n.type === 'FRAME');
+if (f) {
+  const vars = figma.variables.getLocalVariables();
+  const findVar = (name) => vars.find(v => v.name === name);
+  ${comp.varFill ? `
+  const vFill = findVar('${comp.varFill}');
+  if (vFill && f.fills && f.fills.length > 0) {
+    const fills = JSON.parse(JSON.stringify(f.fills));
+    fills[0] = figma.variables.setBoundVariableForPaint(fills[0], 'color', vFill);
+    f.fills = fills;
+  }` : ''}
+  ${comp.varStroke ? `
+  const vStroke = findVar('${comp.varStroke}');
+  if (vStroke && f.strokes && f.strokes.length > 0) {
+    const strokes = JSON.parse(JSON.stringify(f.strokes));
+    strokes[0] = figma.variables.setBoundVariableForPaint(strokes[0], 'color', vStroke);
+    f.strokes = strokes;
+  }` : ''}
+  const c = figma.createComponentFromNode(f);
+  c.x = ${comp.row === 0 ? row0X : row1X};
+  c.y = ${comp.row === 0 ? 0 : 80};
+}
+`;
+      try {
+        figmaUse(`eval "${convertSingle.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+        if (comp.row === 0) row0X += comp.width + gap;
+        else row1X += comp.width + 24;
+      } catch {}
+    }
+    spinner.succeed('9 components with variables');
+
+    await new Promise(r => setTimeout(r, 100));
+
+    console.log(chalk.green('\n  ✓ IDS Base Components created!\n'));
+    console.log(chalk.white('  Components:'));
+    console.log(chalk.gray('    • Button (Primary, Secondary, Outline)'));
+    console.log(chalk.gray('    • Input'));
+    console.log(chalk.gray('    • Card'));
+    console.log(chalk.gray('    • Badge (Default, Success, Warning, Error)'));
+    console.log();
+    console.log(chalk.gray('  Total: 9 components on canvas\n'));
+  });
+
+tokens
+  .command('add <name> <value>')
+  .description('Add a single token')
+  .option('-c, --collection <name>', 'Collection name', 'Tokens')
+  .option('-t, --type <type>', 'Type: COLOR, FLOAT, STRING, BOOLEAN (auto-detected if not set)')
+  .action((name, value, options) => {
+    checkConnection();
+
+    const code = `
+function hexToRgb(hex) {
+  const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+  if (!r) return null;
+  return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
+}
+
+const value = '${value}';
+let type = '${options.type || ''}';
+if (!type) {
+  if (value.startsWith('#')) type = 'COLOR';
+  else if (!isNaN(parseFloat(value))) type = 'FLOAT';
+  else if (value === 'true' || value === 'false') type = 'BOOLEAN';
+  else type = 'STRING';
+}
+
+let col = figma.variables.getLocalVariableCollections().find(c => c.name === '${options.collection}');
+if (!col) col = figma.variables.createVariableCollection('${options.collection}');
+const modeId = col.modes[0].modeId;
+
+const v = figma.variables.createVariable('${name}', col.id, type);
+let figmaValue = value;
+if (type === 'COLOR') figmaValue = hexToRgb(value);
+else if (type === 'FLOAT') figmaValue = parseFloat(value);
+else if (type === 'BOOLEAN') figmaValue = value === 'true';
+v.setValueForMode(modeId, figmaValue);
+
+'Created ' + type.toLowerCase() + ' token: ${name}'
+`;
+
+    try {
+      const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      console.log(chalk.green(result?.trim() || `✓ Created token: ${name}`));
+    } catch (error) {
+      console.log(chalk.red(`✗ Failed to create token: ${name}`));
+    }
+  });
+
 // ============ CREATE ============
 
 const create = program
@@ -506,13 +1097,15 @@ create
   .description('Create a frame')
   .option('-w, --width <n>', 'Width', '100')
   .option('-h, --height <n>', 'Height', '100')
+  .option('-x <n>', 'X position', '0')
+  .option('-y <n>', 'Y position', '0')
   .option('--fill <color>', 'Fill color')
   .option('--radius <n>', 'Corner radius')
   .action((name, options) => {
     checkConnection();
-    let cmd = `create frame --name "${name}" --width ${options.width} --height ${options.height}`;
+    let cmd = `create frame --name "${name}" --x ${options.x} --y ${options.y} --width ${options.width} --height ${options.height}`;
     if (options.fill) cmd += ` --fill "${options.fill}"`;
-    if (options.radius) cmd += ` --cornerRadius ${options.radius}`;
+    if (options.radius) cmd += ` --radius ${options.radius}`;
     figmaUse(cmd);
   });
 

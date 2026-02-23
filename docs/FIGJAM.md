@@ -2,7 +2,55 @@
 
 ## Overview
 
-`figma-ds-cli` includes a custom FigJam client that connects directly via Chrome DevTools Protocol (CDP), bypassing `figma-use` which has compatibility issues with FigJam.
+`figma-ds-cli` includes full FigJam support via CLI commands and a programmatic client, connecting directly via Chrome DevTools Protocol (CDP).
+
+## CLI Commands
+
+```bash
+# List open FigJam pages
+figma-ds-cli figjam list
+figma-ds-cli fj list  # alias
+
+# Show page info
+figma-ds-cli fj info
+
+# List elements on page
+figma-ds-cli fj nodes
+
+# Create sticky note
+figma-ds-cli fj sticky "Hello World!" -x 100 -y 100
+
+# Create shape with text
+figma-ds-cli fj shape "Box Label" -x 100 -y 200 -w 200 -h 100
+
+# Create text
+figma-ds-cli fj text "Plain text" -x 100 -y 400 --size 24
+
+# Connect two nodes
+figma-ds-cli fj connect "2:30" "2:34"
+
+# Move, update, delete
+figma-ds-cli fj move "2:30" 500 500
+figma-ds-cli fj update "2:30" "New text"
+figma-ds-cli fj delete "2:30"
+
+# Execute JavaScript
+figma-ds-cli fj eval "figma.currentPage.children.length"
+```
+
+### All Options
+
+| Command | Options |
+|---------|---------|
+| `sticky <text>` | `-x`, `-y`, `-c/--color`, `-p/--page` |
+| `shape <text>` | `-x`, `-y`, `-w/--width`, `-h/--height`, `-t/--type`, `-p/--page` |
+| `text <content>` | `-x`, `-y`, `-s/--size`, `-p/--page` |
+| `connect <start> <end>` | `-p/--page` |
+| `move <id> <x> <y>` | `-p/--page` |
+| `update <id> <text>` | `-p/--page` |
+| `delete <id>` | `-p/--page` |
+| `eval <code>` | `-p/--page` |
+| `nodes` | `-l/--limit`, `-p/--page` |
 
 ## Why a Custom Client?
 

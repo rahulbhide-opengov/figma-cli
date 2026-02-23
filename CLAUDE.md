@@ -8,6 +8,12 @@ CLI for managing Figma design systems via Chrome DevTools Protocol.
 # Run commands from this directory
 node src/index.js eval "figma.currentPage.name"
 node src/index.js raw query "//FRAME"
+
+# FigJam commands
+node src/index.js fj list
+node src/index.js fj sticky "Hello" -x 100 -y 100
+node src/index.js fj shape "Box" -x 200 -y 100
+node src/index.js fj connect "2:30" "2:34"
 ```
 
 ## Documentation

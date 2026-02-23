@@ -1,5 +1,69 @@
 # Commands Reference
 
+## FigJam Commands
+
+FigJam has its own command group with direct CDP connection (bypasses figma-use):
+
+```bash
+# List open FigJam pages
+figma-ds-cli figjam list
+figma-ds-cli fj list  # alias
+
+# Show page info
+figma-ds-cli fj info
+
+# List elements on page
+figma-ds-cli fj nodes
+figma-ds-cli fj nodes --limit 50
+
+# Create sticky note
+figma-ds-cli fj sticky "Hello World!" -x 100 -y 100
+figma-ds-cli fj sticky "Yellow Note" -x 200 -y 100 --color "#FEF08A"
+
+# Create shape with text
+figma-ds-cli fj shape "Box Label" -x 100 -y 200 -w 200 -h 100
+figma-ds-cli fj shape "Diamond" -x 300 -y 200 --type DIAMOND
+
+# Create text
+figma-ds-cli fj text "Plain text" -x 100 -y 400 --size 24
+
+# Connect two nodes
+figma-ds-cli fj connect "2:30" "2:34"
+
+# Move a node
+figma-ds-cli fj move "2:30" 500 500
+
+# Update text content
+figma-ds-cli fj update "2:30" "New text content"
+
+# Delete a node
+figma-ds-cli fj delete "2:30"
+
+# Execute JavaScript in FigJam
+figma-ds-cli fj eval "figma.currentPage.children.length"
+```
+
+### Shape Types
+
+- `ROUNDED_RECTANGLE` (default)
+- `RECTANGLE`
+- `ELLIPSE`
+- `DIAMOND`
+- `TRIANGLE_UP`
+- `TRIANGLE_DOWN`
+- `PARALLELOGRAM_RIGHT`
+- `PARALLELOGRAM_LEFT`
+
+### Page Selection
+
+All FigJam commands support `-p` or `--page` to target a specific page:
+
+```bash
+figma-ds-cli fj sticky "Note" -p "My Board" -x 100 -y 100
+```
+
+---
+
 ## Setup & Connection
 
 ```bash

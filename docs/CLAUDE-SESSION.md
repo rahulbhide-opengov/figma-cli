@@ -30,6 +30,28 @@ node src/index.js raw query "//*[@name^='session-']"
 node src/index.js raw export "NODE_ID" --scale 2 --suffix "_dark"
 ```
 
+## FigJam Commands
+
+```bash
+# List pages
+node src/index.js fj list
+
+# Create sticky
+node src/index.js fj sticky "Text" -x 100 -y 100
+
+# Create shape
+node src/index.js fj shape "Label" -x 200 -y 100
+
+# Connect nodes
+node src/index.js fj connect "2:30" "2:34"
+
+# List elements
+node src/index.js fj nodes
+
+# Execute JS
+node src/index.js fj eval "figma.currentPage.children.length"
+```
+
 ## Common Operations
 
 ### Scale and Center Content

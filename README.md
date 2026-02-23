@@ -129,6 +129,30 @@ figma-ds-cli export css
 figma-ds-cli export tailwind
 ```
 
+### FigJam
+
+Full FigJam support with sticky notes, shapes, connectors:
+
+```bash
+# List open FigJam pages
+figma-ds-cli fj list
+
+# Create sticky note
+figma-ds-cli fj sticky "Hello World!" -x 100 -y 100
+
+# Create shape with text
+figma-ds-cli fj shape "Box" -x 200 -y 100 -w 200 -h 100
+
+# Connect two elements
+figma-ds-cli fj connect "2:30" "2:34"
+
+# List elements
+figma-ds-cli fj nodes
+
+# Execute FigJam JavaScript
+figma-ds-cli fj eval "figma.currentPage.children.length"
+```
+
 ### Advanced
 
 ```bash

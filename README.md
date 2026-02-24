@@ -1,8 +1,8 @@
 # figma-ds-cli
 
 <p align="center">
-  <img src="https://img.shields.io/npm/v/figma-ds-cli?color=blue" alt="npm version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="platform">
 </p>
 
 CLI for managing Figma design systems. Create variables, components, export tokens, and more.
@@ -18,25 +18,7 @@ CLI for managing Figma design systems. Create variables, components, export toke
   ╚═╝     ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝      ╚═════╝ ╚══════╝       ╚═════╝╚══════╝╚═╝
 ```
 
-## Installation
-
-```bash
-npm install -g figma-ds-cli
-```
-
-## Quick Start
-
-```bash
-npx figma-ds-cli
-```
-
-That's it. One command:
-1. ✓ Installs dependencies
-2. ✓ Patches Figma for CLI access
-3. ✓ Starts Figma and connects
-4. ✓ Shows available commands
-
-## For Designers (with Claude Code)
+## Quick Start (with Claude Code)
 
 No terminal knowledge needed. Just talk to Claude:
 

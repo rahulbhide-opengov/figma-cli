@@ -206,7 +206,7 @@ figma-ds-cli connects to Figma Desktop via Chrome DevTools Protocol. No API key 
 
 - Node.js 18+
 - Figma Desktop (free account works)
-- macOS (Windows/Linux support coming)
+- macOS, Windows, or Linux
 
 ## Credits
 

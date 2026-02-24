@@ -8,8 +8,61 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createInterface } from 'readline';
-import { homedir } from 'os';
+import { homedir, platform } from 'os';
 import { FigJamClient } from './figjam-client.js';
+
+// Platform detection
+const IS_WINDOWS = platform() === 'win32';
+const IS_MAC = platform() === 'darwin';
+const IS_LINUX = platform() === 'linux';
+
+// Platform-specific Figma paths and commands
+function getFigmaPath() {
+  if (IS_MAC) {
+    return '/Applications/Figma.app/Contents/MacOS/Figma';
+  } else if (IS_WINDOWS) {
+    const localAppData = process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
+    return join(localAppData, 'Figma', 'Figma.exe');
+  } else {
+    // Linux
+    return '/usr/bin/figma';
+  }
+}
+
+function startFigma() {
+  const figmaPath = getFigmaPath();
+  if (IS_MAC) {
+    execSync('open -a Figma --args --remote-debugging-port=9222', { stdio: 'pipe' });
+  } else if (IS_WINDOWS) {
+    spawn(figmaPath, ['--remote-debugging-port=9222'], { detached: true, stdio: 'ignore' }).unref();
+  } else {
+    spawn(figmaPath, ['--remote-debugging-port=9222'], { detached: true, stdio: 'ignore' }).unref();
+  }
+}
+
+function killFigma() {
+  try {
+    if (IS_MAC) {
+      execSync('pkill -x Figma 2>/dev/null || true', { stdio: 'pipe' });
+    } else if (IS_WINDOWS) {
+      execSync('taskkill /IM Figma.exe /F 2>nul', { stdio: 'pipe' });
+    } else {
+      execSync('pkill -x figma 2>/dev/null || true', { stdio: 'pipe' });
+    }
+  } catch (e) {
+    // Ignore errors if Figma wasn't running
+  }
+}
+
+function getManualStartCommand() {
+  if (IS_MAC) {
+    return 'open -a Figma --args --remote-debugging-port=9222';
+  } else if (IS_WINDOWS) {
+    return '"%LOCALAPPDATA%\\Figma\\Figma.exe" --remote-debugging-port=9222';
+  } else {
+    return 'figma --remote-debugging-port=9222';
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -167,9 +220,9 @@ program.action(async () => {
     // Step 4: Start Figma
     console.log(chalk.blue('\nStep 4/4: ') + 'Starting Figma...');
     try {
-      execSync('pkill -x Figma 2>/dev/null || true', { stdio: 'pipe' });
+      killFigma();
       await new Promise(r => setTimeout(r, 1000));
-      execSync('open -a Figma --args --remote-debugging-port=9222', { stdio: 'pipe' });
+      startFigma();
       console.log(chalk.green('  ✓ Figma started'));
 
       // Wait for connection
@@ -191,7 +244,7 @@ program.action(async () => {
       }
     } catch (error) {
       console.log(chalk.yellow('  ! Could not start Figma automatically'));
-      console.log(chalk.gray('    Start manually: open -a Figma --args --remote-debugging-port=9222'));
+      console.log(chalk.gray('    Start manually: ' + getManualStartCommand()));
     }
 
     // Done!
@@ -213,9 +266,9 @@ program.action(async () => {
     console.log(chalk.yellow('  ⚠ Figma not connected\n'));
     console.log(chalk.white('  Starting Figma...'));
     try {
-      execSync('pkill -x Figma 2>/dev/null || true', { stdio: 'pipe' });
+      killFigma();
       await new Promise(r => setTimeout(r, 500));
-      execSync('open -a Figma --args --remote-debugging-port=9222', { stdio: 'pipe' });
+      startFigma();
       console.log(chalk.green('  ✓ Figma started\n'));
 
       const spinner = ora('  Waiting for connection...').start();
@@ -231,7 +284,7 @@ program.action(async () => {
       spinner.warn('Open a file in Figma to connect\n');
       showQuickStart();
     } catch {
-      console.log(chalk.gray('  Start manually: open -a Figma --args --remote-debugging-port=9222\n'));
+      console.log(chalk.gray('  Start manually: ' + getManualStartCommand() + '\n'));
     }
   }
 });
@@ -327,9 +380,9 @@ program
     // Step 4: Start Figma
     console.log(chalk.blue('\nStep 4/4: ') + 'Starting Figma...');
     try {
-      execSync('pkill -x Figma 2>/dev/null || true', { stdio: 'pipe' });
+      killFigma();
       await new Promise(r => setTimeout(r, 1000));
-      execSync('open -a Figma --args --remote-debugging-port=9222', { stdio: 'pipe' });
+      startFigma();
       console.log(chalk.green('  ✓ Figma started'));
 
       // Wait for connection
@@ -351,7 +404,7 @@ program
       }
     } catch (error) {
       console.log(chalk.yellow('  ! Could not start Figma automatically'));
-      console.log(chalk.gray('    Start manually: open -a Figma --args --remote-debugging-port=9222'));
+      console.log(chalk.gray('    Start manually: ' + getManualStartCommand()));
     }
 
     // Done!
@@ -409,11 +462,11 @@ program
 
     console.log(chalk.blue('Starting Figma...'));
     try {
-      execSync('pkill -x Figma 2>/dev/null || true', { stdio: 'pipe' });
+      killFigma();
       await new Promise(r => setTimeout(r, 500));
     } catch {}
 
-    execSync('open -a Figma --args --remote-debugging-port=9222');
+    startFigma();
     console.log(chalk.green('✓ Figma started\n'));
 
     // Wait and check connection

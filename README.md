@@ -36,6 +36,33 @@ That's it. One command:
 3. ✓ Starts Figma and connects
 4. ✓ Shows available commands
 
+## For Designers (with Claude Code)
+
+No terminal knowledge needed. Just talk to Claude:
+
+**1. Download this repo**
+
+Click "Code" → "Download ZIP" → Unzip the folder
+
+**2. Open Claude Code in that folder**
+
+```bash
+cd ~/Downloads/figma-cli-main
+claude
+```
+
+**3. Tell Claude what you want**
+
+> "Install Node.js if needed, then install dependencies and connect to Figma"
+
+Claude handles everything. Then just ask:
+
+> "Create Tailwind colors in Figma"
+> "Add a sticky note to FigJam"
+> "Export my variables as CSS"
+
+Claude reads the documentation and runs the right commands for you.
+
 ## Usage
 
 ### Start Figma (after initial setup)

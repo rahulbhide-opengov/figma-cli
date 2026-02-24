@@ -46,8 +46,15 @@ Click "Code" → "Download ZIP" → Unzip the folder
 
 **2. Open Claude Code in that folder**
 
+macOS / Linux:
 ```bash
 cd ~/Downloads/figma-cli-main
+claude
+```
+
+Windows (PowerShell):
+```powershell
+cd $HOME\Downloads\figma-cli-main
 claude
 ```
 
@@ -62,6 +69,8 @@ Claude handles everything. Then just ask:
 > "Export my variables as CSS"
 
 Claude reads the documentation and runs the right commands for you.
+
+**Works on:** macOS, Windows, and Linux.
 
 ## Usage
 

@@ -236,6 +236,43 @@ node src/index.js fj eval "
    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
    ```
 
+## Creating Designs Best Practices
+
+1. **Always check available variables and components first** before creating designs:
+   ```bash
+   node src/index.js var list                    # List all variables
+   node src/index.js col list                    # List variable collections
+   node src/index.js eval 'figma.root.children.map(p => p.name)'  # List pages
+   ```
+   Then explore component pages to find reusable components.
+
+2. **Use existing components** (Avatar, Button, Calendar, etc.) instead of building from scratch.
+
+3. **Bind variables** for colors, spacing, and border radius to maintain design system consistency.
+
+4. **Place new frames on canvas without overlapping** existing designs:
+   ```javascript
+   // Get rightmost position of existing frames
+   const frames = figma.currentPage.children.filter(n => n.type === "FRAME");
+   let maxX = 0;
+   frames.forEach(f => { maxX = Math.max(maxX, f.x + f.width); });
+
+   // Position new frame with 100px gap
+   newFrame.x = maxX + 100;
+   newFrame.y = 0;
+   ```
+
+5. **Reposition overlapping frames** if needed:
+   ```javascript
+   const frames = figma.currentPage.children.filter(n => n.name.includes("MyDesign"));
+   let currentX = 0;
+   frames.forEach(f => {
+     f.x = currentX;
+     f.y = 0;
+     currentX += f.width + 100;  // 100px gap
+   });
+   ```
+
 ## Shape Types (FigJam)
 
 ROUNDED_RECTANGLE, RECTANGLE, ELLIPSE, DIAMOND, TRIANGLE_UP, TRIANGLE_DOWN, PARALLELOGRAM_RIGHT, PARALLELOGRAM_LEFT

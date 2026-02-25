@@ -3417,7 +3417,7 @@ return results.length === 0 ? 'No nodes found matching "${name}"' : results.slic
 
 // ============ RENDER ============
 
-// Helper: Get next free X position for smart positioning
+// Helper: Get next free X position for smart positioning (horizontal)
 function getNextFreeX(gap = 100) {
   try {
     const result = figmaEvalSync(`(function() {
@@ -3426,6 +3426,22 @@ function getNextFreeX(gap = 100) {
         maxX = Math.max(maxX, n.x + n.width);
       });
       return maxX;
+    })()`);
+    return (result || 0) + gap;
+  } catch {
+    return 0;
+  }
+}
+
+// Helper: Get next free Y position for smart positioning (vertical)
+function getNextFreeY(gap = 100) {
+  try {
+    const result = figmaEvalSync(`(function() {
+      let maxY = 0;
+      figma.currentPage.children.forEach(n => {
+        maxY = Math.max(maxY, n.y + n.height);
+      });
+      return maxY;
     })()`);
     return (result || 0) + gap;
   } catch {
@@ -3477,6 +3493,7 @@ program
   .description('Render multiple JSX frames (uses figma-use render)')
   .argument('<jsxArray>', 'JSON array of JSX strings, e.g. \'["<Frame>...</Frame>","<Frame>...</Frame>"]\'')
   .option('-g, --gap <n>', 'Gap between frames', '40')
+  .option('-d, --direction <dir>', 'Layout direction: row (horizontal) or col (vertical)', 'row')
   .action(async (jsxArrayStr, options) => {
     await checkConnection();
     try {
@@ -3486,12 +3503,14 @@ program
       }
 
       const gap = parseInt(options.gap) || 40;
-      let currentX = getNextFreeX(gap);
+      const vertical = options.direction === 'col' || options.direction === 'column' || options.direction === 'vertical';
+      let currentX = vertical ? 0 : getNextFreeX(gap);
+      let currentY = vertical ? getNextFreeY(gap) : 0;
       let results = [];
 
       for (const jsx of jsxArray) {
         try {
-          const cmd = `npx figma-use render --stdin --json --x ${currentX} --y 0`;
+          const cmd = `npx figma-use render --stdin --json --x ${currentX} --y ${currentY}`;
           const output = execSync(cmd, {
             input: jsx,
             encoding: 'utf8',
@@ -3503,12 +3522,18 @@ program
           results.push(result);
           console.log(chalk.green('✓ Rendered: ' + result.id + (result.name ? ' (' + result.name + ')' : '')));
 
-          // Get width of created frame for next position
+          // Get size of created frame for next position
           try {
-            const width = figmaEvalSync(`figma.getNodeById('${result.id}')?.width || 300`);
-            currentX += width + gap;
+            if (vertical) {
+              const height = figmaEvalSync(`(function() { const n = figma.getNodeById('${result.id}'); return n ? n.height : 200; })()`);
+              currentY += (height || 200) + gap;
+            } else {
+              const width = figmaEvalSync(`(function() { const n = figma.getNodeById('${result.id}'); return n ? n.width : 300; })()`);
+              currentX += (width || 300) + gap;
+            }
           } catch {
-            currentX += 300 + gap; // fallback width
+            if (vertical) currentY += 200 + gap;
+            else currentX += 300 + gap;
           }
         } catch (err) {
           console.log(chalk.red('✗ Failed to render: ' + (err.stderr || err.message)));

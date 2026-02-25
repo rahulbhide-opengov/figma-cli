@@ -164,12 +164,26 @@ npx figma-use render --stdin  # DON'T USE THIS DIRECTLY
 
 For multiple frames, use `render-batch` with a JSON array:
 ```bash
+# Horizontal layout (default)
 node src/index.js render-batch '[
   "<Frame name=\"Card 1\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 1</Text></Frame>",
-  "<Frame name=\"Card 2\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 2</Text></Frame>",
-  "<Frame name=\"Card 3\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 3</Text></Frame>"
+  "<Frame name=\"Card 2\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 2</Text></Frame>"
 ]'
+
+# Vertical layout (use -d col)
+node src/index.js render-batch '[
+  "<Frame name=\"Card 1\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 1</Text></Frame>",
+  "<Frame name=\"Card 2\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 2</Text></Frame>"
+]' -d col
+
+# Custom gap
+node src/index.js render-batch '[...]' -g 24
 ```
+
+Options:
+- `-d row` - Horizontal layout (default)
+- `-d col` - Vertical layout
+- `-g <n>` - Gap between frames (default: 40)
 
 This creates all frames in ONE process with ONE connection = much faster.
 

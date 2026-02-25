@@ -1906,7 +1906,6 @@ program
 
 program
   .command('analyze-url <url>')
-  .alias('analyze')
   .description('Analyze a webpage with Playwright and extract exact CSS values')
   .option('-w, --width <n>', 'Viewport width', '1440')
   .option('-h, --height <n>', 'Viewport height', '900')

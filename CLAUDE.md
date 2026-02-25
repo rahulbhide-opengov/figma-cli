@@ -726,6 +726,14 @@ node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={
 
 ### Render Command Reference
 
+**Supported JSX Elements:**
+- `<Frame>` - Auto-layout frame (container)
+- `<Text>` - Text with content
+- `<Rectangle>` / `<Rect>` - Rectangle shape
+- `<Image>` - Image placeholder
+- `<Icon>` - Icon placeholder
+- `<Instance>` - Component instance
+
 ```bash
 # Frame with auto-layout
 <Frame name="Name" w={320} h={180} bg="#color" rounded={16} flex="col" gap={8} p={24}>
@@ -733,8 +741,34 @@ node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={
 # Text with fill width (prevents overflow)
 <Text size={14} color="#color" w="fill">Content</Text>
 
+# Rectangle
+<Rectangle w={100} h={100} bg="#e4e4e7" rounded={8} />
+
+# Component Instance (by ID or name)
+<Instance component="2:28" />
+<Instance name="Card - Basic" />
+
 # Position on canvas
 <Frame x={1000} y={0} ...>
+```
+
+### Using Component Instances
+
+Create a gallery with existing components:
+```bash
+node src/index.js render '<Frame name="Card Gallery" w={1200} h={400} bg="#f4f4f5" flex="row" gap={24} p={40}>
+  <Instance name="Card - Basic" />
+  <Instance name="Card - CTA" />
+  <Instance name="Card - Image" />
+</Frame>'
+```
+
+Or by component ID:
+```bash
+node src/index.js render '<Frame name="Cards" flex="row" gap={24}>
+  <Instance component="2:28" />
+  <Instance component="2:29" />
+</Frame>'
 ```
 
 ### IMPORTANT: Create Elements INSIDE Frames

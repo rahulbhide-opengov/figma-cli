@@ -384,6 +384,19 @@ export class FigmaClient {
       }
     }
 
+    // Parse Instance elements (self-closing) - creates component instance
+    const instanceRegex = /<Instance\s+([^/]*)\s*\/>/g;
+    while ((match = instanceRegex.exec(childrenStr)) !== null) {
+      const idx = match.index;
+      const insideFrame = frameRanges.some(r => idx >= r.start && idx < r.end);
+      if (!insideFrame) {
+        const instProps = this.parseProps(match[1]);
+        instProps._type = 'instance';
+        instProps._index = idx;
+        children.push(instProps);
+      }
+    }
+
     // Sort by original position in JSX to maintain order
     children.sort((a, b) => a._index - b._index);
 
@@ -537,6 +550,29 @@ export class FigmaClient {
         el${idx}.cornerRadius = ${Math.round(icSize / 4)};
         el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(icBg)}}];
         ${parentVar}.appendChild(el${idx});`;
+        } else if (item._type === 'instance') {
+          // Component instance
+          const compId = item.component || item.id;
+          const compName = item.name;
+
+          if (compId) {
+            // Create instance by component ID
+            return `
+        const comp${idx} = figma.getNodeById(${JSON.stringify(compId)});
+        if (comp${idx} && comp${idx}.type === 'COMPONENT') {
+          const el${idx} = comp${idx}.createInstance();
+          ${parentVar}.appendChild(el${idx});
+        }`;
+          } else if (compName) {
+            // Find component by name and create instance
+            return `
+        const comp${idx} = figma.currentPage.findOne(n => n.type === 'COMPONENT' && n.name === ${JSON.stringify(compName)});
+        if (comp${idx}) {
+          const el${idx} = comp${idx}.createInstance();
+          ${parentVar}.appendChild(el${idx});
+        }`;
+          }
+          return '';
         }
         return '';
       }).join('\n');

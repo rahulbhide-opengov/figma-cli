@@ -452,45 +452,124 @@ Wenn der User "erstelle ein Design" sagt:
 3. **Nie lose Elemente** direkt auf dem Canvas
 
 ```javascript
-// RICHTIG: Elemente innerhalb eines Frames
+// RICHTIG: Frame mit vollständigem Auto-Layout Setup
 const frame = figma.createFrame();
-frame.layoutMode = 'VERTICAL';
-frame.itemSpacing = 16;
-frame.paddingTop = 24;
-// ...
+frame.name = 'Card';
+frame.resize(300, 200);
+frame.cornerRadius = 16;
 
+// Auto-Layout MUSS gesetzt werden
+frame.layoutMode = 'VERTICAL';           // oder 'HORIZONTAL'
+frame.primaryAxisSizingMode = 'FIXED';   // oder 'AUTO' für hug
+frame.counterAxisSizingMode = 'FIXED';   // oder 'AUTO' für hug
+frame.itemSpacing = 12;                  // Gap zwischen children
+frame.paddingTop = 24;
+frame.paddingBottom = 24;
+frame.paddingLeft = 24;
+frame.paddingRight = 24;
+frame.clipsContent = true;               // Inhalt clippen
+
+// Text mit FILL width damit er NICHT aus dem Frame rausgeht
 const title = figma.createText();
 title.characters = 'Title';
-frame.appendChild(title);  // INNERHALB des Frames
+title.layoutSizingHorizontal = 'FILL';   // WICHTIG: Text füllt Breite
+frame.appendChild(title);
 
 const body = figma.createText();
-body.characters = 'Body';
-frame.appendChild(body);   // INNERHALB des Frames
+body.characters = 'Body text that might be longer';
+body.layoutSizingHorizontal = 'FILL';    // WICHTIG: Text füllt Breite
+body.textAutoResize = 'HEIGHT';          // WICHTIG: Höhe passt sich an
+frame.appendChild(body);
 ```
+
+### Auto-Layout Text Settings (KRITISCH)
+
+Text-Layer die NICHT aus dem Frame rausgehen sollen:
+```javascript
+text.layoutSizingHorizontal = 'FILL';  // Text füllt Container-Breite
+text.textAutoResize = 'HEIGHT';        // Höhe wächst mit Content (wrapping)
+```
+
+Ohne diese Settings geht Text über den Frame-Rand hinaus!
 
 ### Zwei Ebenen der Positionierung
 
 1. **Frames auf Canvas** → Smart Positioning (nebeneinander, nie überlappend)
 2. **Elemente in Frame** → appendChild + Auto-Layout
 
+### Komplettes Card-Beispiel mit Variables
+
 ```javascript
-// Mehrere Cards nebeneinander auf Canvas
-for (const cardData of cards) {
-  // Smart position für jeden Frame
+(async function() {
+  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+
+  // Variables holen
+  const cardBg = figma.variables.getVariableById('VariableID:1:5');
+  const cardFg = figma.variables.getVariableById('VariableID:1:6');
+  const mutedFg = figma.variables.getVariableById('VariableID:1:14');
+  const border = figma.variables.getVariableById('VariableID:1:19');
+  const col = figma.variables.getVariableCollectionById('VariableCollectionId:1:2');
+
+  // Smart Position
   let smartX = 0;
   figma.currentPage.children.forEach(n => {
     smartX = Math.max(smartX, n.x + n.width);
   });
-  smartX += 40; // Gap zwischen Frames
+  smartX += 40;
 
+  // Card Frame mit Auto-Layout
   const card = figma.createFrame();
+  card.name = 'Card';
   card.x = smartX;
+  card.y = 0;
+  card.resize(300, 200);
+  card.cornerRadius = 16;
   card.layoutMode = 'VERTICAL';
+  card.primaryAxisSizingMode = 'FIXED';
+  card.counterAxisSizingMode = 'FIXED';
+  card.itemSpacing = 12;
+  card.paddingTop = 24;
+  card.paddingBottom = 24;
+  card.paddingLeft = 24;
+  card.paddingRight = 24;
+  card.clipsContent = true;
+  card.strokeWeight = 1;
 
-  // Elemente INNERHALB der Card
+  // Variable binding für Fills
+  card.fills = [figma.variables.setBoundVariableForPaint(
+    {type:'SOLID',color:{r:1,g:1,b:1}}, 'color', cardBg
+  )];
+  card.strokes = [figma.variables.setBoundVariableForPaint(
+    {type:'SOLID',color:{r:0.9,g:0.9,b:0.9}}, 'color', border
+  )];
+
+  // Light/Dark Mode setzen
+  card.setExplicitVariableModeForCollection(col.id, col.modes[0].modeId);
+
+  // Title - FILL width
   const title = figma.createText();
+  title.fontName = {family:'Inter',style:'Bold'};
+  title.characters = 'Card Title';
+  title.fontSize = 20;
+  title.fills = [figma.variables.setBoundVariableForPaint(
+    {type:'SOLID',color:{r:0,g:0,b:0}}, 'color', cardFg
+  )];
+  title.layoutSizingHorizontal = 'FILL';
   card.appendChild(title);
-}
+
+  // Description - FILL width + HEIGHT auto
+  const desc = figma.createText();
+  desc.fontName = {family:'Inter',style:'Regular'};
+  desc.characters = 'Description text that wraps nicely.';
+  desc.fontSize = 14;
+  desc.fills = [figma.variables.setBoundVariableForPaint(
+    {type:'SOLID',color:{r:0.5,g:0.5,b:0.5}}, 'color', mutedFg
+  )];
+  desc.layoutSizingHorizontal = 'FILL';
+  desc.textAutoResize = 'HEIGHT';
+  card.appendChild(desc);
+})()
 ```
 
 ### Weitere Best Practices

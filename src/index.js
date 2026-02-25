@@ -3571,6 +3571,146 @@ program
     figmaUse(command.join(' '));
   });
 
+// ============ DESIGN ANALYSIS (figma-use) ============
+
+program
+  .command('lint')
+  .description('Lint design for issues (figma-use)')
+  .option('--fix', 'Auto-fix issues where possible')
+  .option('--rules <rules>', 'Comma-separated rules to check')
+  .action((options) => {
+    checkConnection();
+    let cmd = 'npx figma-use lint';
+    if (options.fix) cmd += ' --fix';
+    if (options.rules) cmd += ` --rules ${options.rules}`;
+    try {
+      execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+    } catch (error) {
+      // figma-use exits with error if issues found, that's ok
+    }
+  });
+
+const analyze = program
+  .command('analyze')
+  .description('Analyze design (colors, typography, spacing, clusters)');
+
+analyze
+  .command('colors')
+  .description('Analyze color usage')
+  .option('--json', 'Output as JSON')
+  .action((options) => {
+    checkConnection();
+    let cmd = 'npx figma-use analyze colors';
+    if (options.json) cmd += ' --json';
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+analyze
+  .command('typography')
+  .alias('type')
+  .description('Analyze typography usage')
+  .option('--json', 'Output as JSON')
+  .action((options) => {
+    checkConnection();
+    let cmd = 'npx figma-use analyze typography';
+    if (options.json) cmd += ' --json';
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+analyze
+  .command('spacing')
+  .description('Analyze spacing (gap/padding) usage')
+  .option('--json', 'Output as JSON')
+  .action((options) => {
+    checkConnection();
+    let cmd = 'npx figma-use analyze spacing';
+    if (options.json) cmd += ' --json';
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+analyze
+  .command('clusters')
+  .description('Find repeated patterns (potential components)')
+  .option('--json', 'Output as JSON')
+  .action((options) => {
+    checkConnection();
+    let cmd = 'npx figma-use analyze clusters';
+    if (options.json) cmd += ' --json';
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+// ============ NODE OPERATIONS (figma-use) ============
+
+const node = program
+  .command('node')
+  .description('Node operations (tree, bindings, to-component)');
+
+node
+  .command('tree [nodeId]')
+  .description('Show node tree structure')
+  .option('-d, --depth <n>', 'Max depth', '3')
+  .action((nodeId, options) => {
+    checkConnection();
+    let cmd = 'npx figma-use node tree';
+    if (nodeId) cmd += ` "${nodeId}"`;
+    cmd += ` --depth ${options.depth}`;
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+node
+  .command('bindings [nodeId]')
+  .description('Show variable bindings for node')
+  .action((nodeId) => {
+    checkConnection();
+    let cmd = 'npx figma-use node bindings';
+    if (nodeId) cmd += ` "${nodeId}"`;
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+node
+  .command('to-component <nodeIds...>')
+  .description('Convert frames to components')
+  .action((nodeIds) => {
+    checkConnection();
+    const cmd = `npx figma-use node to-component "${nodeIds.join(' ')}"`;
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+node
+  .command('delete <nodeIds...>')
+  .description('Delete nodes by ID')
+  .action((nodeIds) => {
+    checkConnection();
+    const cmd = `npx figma-use node delete "${nodeIds.join(' ')}"`;
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+// ============ EXPORT (figma-use) ============
+
+program
+  .command('export-jsx [nodeId]')
+  .description('Export node as JSX/React code')
+  .option('-o, --output <file>', 'Output file')
+  .action((nodeId, options) => {
+    checkConnection();
+    let cmd = 'npx figma-use export jsx';
+    if (nodeId) cmd += ` "${nodeId}"`;
+    if (options.output) cmd += ` -o "${options.output}"`;
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
+program
+  .command('export-storybook [nodeId]')
+  .description('Export node as Storybook story')
+  .option('-o, --output <file>', 'Output file')
+  .action((nodeId, options) => {
+    checkConnection();
+    let cmd = 'npx figma-use export storybook';
+    if (nodeId) cmd += ` "${nodeId}"`;
+    if (options.output) cmd += ` -o "${options.output}"`;
+    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+  });
+
 // ============ FIGJAM ============
 
 const figjam = program

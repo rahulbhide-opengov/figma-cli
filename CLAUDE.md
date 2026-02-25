@@ -614,6 +614,85 @@ node src/index.js export tailwind
 node src/index.js export screenshot -o screenshot.png
 ```
 
+"Export node as JSX/React code"
+```bash
+node src/index.js export-jsx "1:234"
+node src/index.js export-jsx "1:234" -o component.jsx
+```
+
+"Export node as Storybook story"
+```bash
+node src/index.js export-storybook "1:234"
+node src/index.js export-storybook "1:234" -o Button.stories.jsx
+```
+
+### Design Analysis & Linting
+
+"Lint design for issues"
+```bash
+node src/index.js lint              # Check all rules
+node src/index.js lint --fix        # Auto-fix issues
+node src/index.js lint --rules color-contrast,touch-target-size
+```
+
+Available lint rules:
+- `no-default-names` - detect unnamed layers
+- `no-deeply-nested` - flag excessive nesting
+- `no-empty-frames` - find empty frames
+- `prefer-auto-layout` - suggest auto-layout
+- `no-hardcoded-colors` - check variable usage
+- `color-contrast` - WCAG AA/AAA compliance
+- `touch-target-size` - minimum 44x44 check
+- `min-text-size` - minimum 12px text
+
+"Analyze color usage"
+```bash
+node src/index.js analyze colors          # Human readable
+node src/index.js analyze colors --json   # JSON output
+```
+
+"Analyze typography"
+```bash
+node src/index.js analyze typography
+node src/index.js analyze type --json     # alias
+```
+
+"Analyze spacing (gap/padding)"
+```bash
+node src/index.js analyze spacing
+```
+
+"Find repeated patterns (potential components)"
+```bash
+node src/index.js analyze clusters
+```
+
+### Node Operations
+
+"Show node tree structure"
+```bash
+node src/index.js node tree              # Current selection
+node src/index.js node tree "1:234"      # Specific node
+node src/index.js node tree -d 5         # Deeper depth
+```
+
+"Show variable bindings"
+```bash
+node src/index.js node bindings          # Current selection
+node src/index.js node bindings "1:234"  # Specific node
+```
+
+"Convert frames to components"
+```bash
+node src/index.js node to-component "1:234" "1:235" "1:236"
+```
+
+"Delete nodes by ID"
+```bash
+node src/index.js node delete "1:234"
+node src/index.js node delete "1:234" "1:235"
+```
+
 ## Advanced: Custom JavaScript
 
 For complex operations, use `eval` with Figma Plugin API:

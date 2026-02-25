@@ -5,7 +5,6 @@
   <img src="https://img.shields.io/badge/Figma-Desktop-purple" alt="Figma Desktop">
   <img src="https://img.shields.io/badge/No_API_Key-Required-green" alt="No API Key">
   <img src="https://img.shields.io/badge/Claude_Code-Ready-blue" alt="Claude Code">
-  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT License">
 </p>
 
 <p align="center">

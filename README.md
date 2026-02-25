@@ -72,9 +72,7 @@ No explaining. No teaching. Just ask.
 
 ### Step 1: Download
 
-Go to **[github.com/silships/figma-cli](https://github.com/silships/figma-cli)**
-
-Click **Code** → **Download ZIP**. Unzip it.
+Click the green **Code** button above → **Download ZIP**. Unzip it.
 
 ### Step 2: Open Terminal
 

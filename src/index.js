@@ -267,8 +267,32 @@ async function figmaEval(code) {
   return await client.eval(code);
 }
 
-// Sync wrapper for figmaEval using temp file
+// Sync wrapper for figmaEval - uses daemon via curl (fast) or fallback to direct connection
 function figmaEvalSync(code) {
+  // Try daemon first (fast path)
+  const daemonRunning = isDaemonRunning();
+  if (daemonRunning) {
+    try {
+      const payload = JSON.stringify({ action: 'eval', code });
+      const payloadFile = `/tmp/figma-payload-${Date.now()}.json`;
+      writeFileSync(payloadFile, payload);
+      const result = execSync(
+        `curl -s -X POST http://127.0.0.1:3456/exec -H "Content-Type: application/json" -d @${payloadFile}`,
+        { encoding: 'utf8', timeout: 15000 }
+      );
+      try { unlinkSync(payloadFile); } catch {}
+      if (!result || result.trim() === '') {
+        throw new Error('Empty response from daemon');
+      }
+      const data = JSON.parse(result);
+      if (data.error) throw new Error(data.error);
+      return data.result;
+    } catch (e) {
+      // Fall through to direct connection
+    }
+  }
+
+  // Fallback: direct connection via temp script
   const tempFile = join('/tmp', `figma-eval-${Date.now()}.mjs`);
   const resultFile = join('/tmp', `figma-result-${Date.now()}.json`);
 
@@ -311,7 +335,8 @@ function figmaUse(args, options = {}) {
   const evalMatch = args.match(/^eval\s+"(.+)"$/s) || args.match(/^eval\s+'(.+)'$/s);
 
   if (evalMatch) {
-    const code = evalMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    // Only unescape quotes, NOT \n (which would break string literals like .join('\n'))
+    const code = evalMatch[1].replace(/\\"/g, '"');
     try {
       const result = figmaEvalSync(code);
       if (!options.silent && result !== undefined) {
@@ -3373,7 +3398,7 @@ program
   .option('-l, --limit <n>', 'Limit results', '20')
   .action((name, options) => {
     checkConnection();
-    let code = `
+    let code = `(function() {
 const results = [];
 function search(node) {
   if (node.name && node.name.toLowerCase().includes('${name.toLowerCase()}')) {
@@ -3385,8 +3410,8 @@ function search(node) {
   }
 }
 search(figma.currentPage);
-results.length === 0 ? 'No nodes found matching "${name}"' : results.slice(0, ${options.limit}).map(r => r.id + ' [' + r.type + '] ' + r.name).join('\\n')
-`;
+return results.length === 0 ? 'No nodes found matching "${name}"' : results.slice(0, ${options.limit}).map(r => r.id + ' [' + r.type + '] ' + r.name).join('\\n');
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 

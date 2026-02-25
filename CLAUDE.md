@@ -25,35 +25,23 @@ Figma must be running. Then:
 node src/index.js connect
 ```
 
-## Speed Tips (figma-use)
+## Speed Daemon (Auto-Start)
 
-Start the daemon for faster command execution:
+The `connect` command automatically starts a background daemon that keeps the WebSocket connection open. This makes all subsequent commands ~10x faster.
+
 ```bash
-npx figma-use daemon start
+node src/index.js connect
+# Output:
+# ✓ Figma started
+# ✓ Connected to Figma
+# ✓ Speed daemon running (commands are now 10x faster)
 ```
 
-Direct figma-use commands (faster than wrapping):
+**Manual daemon control (if needed):**
 ```bash
-# Arrange elements on canvas
-npx figma-use arrange --mode column --gap 20
-
-# Inspect node structure
-npx figma-use node tree "2:123"
-
-# Check variable bindings
-npx figma-use node bindings "2:123"
-
-# Move nodes
-npx figma-use node move "2:123" --x 100 --y 200
-
-# Delete nodes
-npx figma-use node delete "2:123"
-
-# Select nodes
-npx figma-use selection set "2:123 2:124"
-
-# Convert frames to components
-npx figma-use node to-component "2:123"
+node src/index.js daemon status   # Check if running
+node src/index.js daemon restart  # Restart if issues
+node src/index.js daemon stop     # Stop daemon
 ```
 
 ## Key Learnings
@@ -795,3 +783,97 @@ ROUNDED_RECTANGLE, RECTANGLE, ELLIPSE, DIAMOND, TRIANGLE_UP, TRIANGLE_DOWN, PARA
 - `//*[@name='Card']` - by exact name
 - `//*[@name^='Button']` - name starts with
 - `//*[contains(@name, 'Icon')]` - name contains
+
+---
+
+## Development Notes (Internal)
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      figma-ds-cli                           │
+├─────────────────────────────────────────────────────────────┤
+│  index.js          │  CLI commands (commander.js)          │
+│  figma-client.js   │  WebSocket connection + Figma API     │
+│  daemon.js         │  Background HTTP server for speed     │
+│  figma-patch.js    │  Patches Figma for remote debugging   │
+│  figjam-client.js  │  FigJam-specific operations           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ WebSocket (CDP)
+                    ┌─────────────────────┐
+                    │   Figma Desktop     │
+                    │   localhost:9222    │
+                    └─────────────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/index.js` | Main CLI entry, all commands defined here |
+| `src/figma-client.js` | FigmaClient class, render(), eval(), parseJSX() |
+| `src/daemon.js` | HTTP server that keeps connection open |
+| `src/figma-patch.js` | Patches app.asar to enable --remote-debugging-port |
+
+### Speed Daemon Implementation
+
+**Problem:** Each CLI call spawned new Node.js process + new WebSocket = slow.
+
+**Solution:** Background HTTP daemon on port 3456:
+- Starts automatically with `connect`
+- Keeps WebSocket to Figma open
+- Commands send HTTP POST to daemon instead of spawning process
+- ~10x faster for all operations
+
+**Flow:**
+```
+CLI Command → isDaemonRunning()?
+  → Yes: HTTP POST to localhost:3456/exec → daemon uses persistent WebSocket
+  → No:  Fallback to direct FigmaClient (slower)
+```
+
+### render Command JSX Parser
+
+Supports simplified JSX syntax:
+```jsx
+<Frame name="Card" w={300} h={200} bg="#fff" rounded={16} flex="col" gap={8} p={24}>
+  <Text size={20} weight="bold" color="#000">Title</Text>
+  <Text size={14} color="#666" w="fill">Description</Text>
+</Frame>
+```
+
+**Props supported:**
+- Frame: `name`, `w/width`, `h/height`, `bg/fill`, `stroke`, `rounded/radius`, `flex`, `gap`, `p/padding`, `px`, `py`, `x`, `y`
+- Text: `size`, `weight` (regular/medium/semibold/bold), `color`, `w="fill"`
+
+**Smart Positioning:** Automatically calculates next free X position (100px gap).
+
+### Text Creation Order (Important!)
+
+Must be: create → set font/content → appendChild → set layoutSizingHorizontal
+
+```javascript
+const text = figma.createText();
+text.fontName = { family: 'Inter', style: 'Bold' };
+text.characters = 'Hello';
+text.fills = [...];
+frame.appendChild(text);  // AFTER font/content
+text.layoutSizingHorizontal = 'FILL';  // AFTER appendChild
+```
+
+### Known Issues / TODOs
+
+- [ ] Y-positioning for vertical layouts (currently only X smart positioning)
+- [ ] Nested frames in JSX not fully supported
+- [ ] Font family selection (currently hardcoded to Inter)
+
+### Session 2026-02-25 Changes
+
+1. **Speed Daemon** - Auto-starts with connect, 10x faster commands
+2. **render-batch** - Create multiple frames in one call
+3. **Smart Positioning** - Frames auto-position to avoid overlaps
+4. **Welcome Message** - Friendly "Howdy, designer!" box after connect
+5. **Text Layout Fix** - Correct order for layoutSizingHorizontal
+6. **CLAUDE.md Updates** - Prioritize render over eval, batch docs

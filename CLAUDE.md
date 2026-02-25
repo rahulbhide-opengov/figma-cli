@@ -42,11 +42,12 @@ npx figma-use node to-component "2:123"
 
 ## Key Learnings
 
-1. **Use `render` for complex designs** - JSX handles fonts and nesting automatically
-2. **Use `npx figma-use` directly** - Faster than wrapper commands, especially with daemon
-3. **Bind variables with script files** - Write JS to `/tmp/script.js`, run with `npx figma-use eval "$(cat /tmp/script.js)"`
-4. **Verify with `node bindings`** - Check if fills/strokes are bound to variables
-5. **Clean up with `arrange`** - Shows all top-level elements and organizes them
+1. **Use `render` for frames with text** - JSX handles fonts and nesting automatically
+2. **Use `eval` for bulk operations** - Color palettes, variable bindings, deletions
+3. **Use `npx figma-use` directly** - Faster than wrapper commands, especially with daemon
+4. **Write scripts to `/tmp/`** - Run with `npx figma-use eval "$(cat /tmp/script.js)"`
+5. **Convert frames with `node to-component`** - `npx figma-use node to-component "id1 id2 id3"`
+6. **Verify with `node bindings`** - Check if fills/strokes are bound to variables
 
 ## What Users Might Ask → Commands
 

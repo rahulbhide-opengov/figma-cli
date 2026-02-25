@@ -10,7 +10,7 @@
 <p align="center">
   <b>Control Figma directly from your terminal.</b><br>
   Full read/write access to Figma Desktop via Chrome DevTools Protocol.<br>
-  No API key, no plugins, no waiting for approval.
+  No API key, no plugins, no MCP server setup.
 </p>
 
 ```

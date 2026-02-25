@@ -436,15 +436,10 @@ program.action(async () => {
         spinner.fail('Patch failed: ' + error.message);
         if ((error.message.includes('EPERM') || error.message.includes('permission') || error.message.includes('Full Disk Access')) && process.platform === 'darwin') {
           console.log(chalk.yellow('\n  ⚠️  Your Terminal needs "Full Disk Access" permission.\n'));
-          console.log(chalk.white('  Opening System Settings for you...'));
-          console.log(chalk.gray('  1. Click + and add your Terminal app'));
-          console.log(chalk.gray('  2. Quit Terminal completely (Cmd+Q)'));
-          console.log(chalk.gray('  3. Reopen Terminal and try again\n'));
-
-          // Open System Settings directly to Full Disk Access
-          try {
-            execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
-          } catch {}
+          console.log(chalk.gray('  1. Open System Settings → Privacy & Security → Full Disk Access'));
+          console.log(chalk.gray('  2. Click + and add your Terminal app'));
+          console.log(chalk.gray('  3. Quit Terminal completely (Cmd+Q)'));
+          console.log(chalk.gray('  4. Reopen Terminal and try again\n'));
         } else if (error.message.includes('EPERM') || error.message.includes('permission')) {
           console.log(chalk.yellow('\n  Try running as administrator.\n'));
         }
@@ -601,15 +596,10 @@ program
         spinner.fail('Patch failed: ' + error.message);
         if ((error.message.includes('EPERM') || error.message.includes('permission') || error.message.includes('Full Disk Access')) && process.platform === 'darwin') {
           console.log(chalk.yellow('\n  ⚠️  Your Terminal needs "Full Disk Access" permission.\n'));
-          console.log(chalk.white('  Opening System Settings for you...'));
-          console.log(chalk.gray('  1. Click + and add your Terminal app'));
-          console.log(chalk.gray('  2. Quit Terminal completely (Cmd+Q)'));
-          console.log(chalk.gray('  3. Reopen Terminal and try again\n'));
-
-          // Open System Settings directly to Full Disk Access
-          try {
-            execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
-          } catch {}
+          console.log(chalk.gray('  1. Open System Settings → Privacy & Security → Full Disk Access'));
+          console.log(chalk.gray('  2. Click + and add your Terminal app'));
+          console.log(chalk.gray('  3. Quit Terminal completely (Cmd+Q)'));
+          console.log(chalk.gray('  4. Reopen Terminal and try again\n'));
         } else if (error.message.includes('EPERM') || error.message.includes('permission')) {
           console.log(chalk.yellow('\n  Try running as administrator.\n'));
         }
@@ -757,16 +747,11 @@ program
 
           console.log(chalk.white('  Your Terminal needs permission to configure Figma.\n'));
 
-          console.log(chalk.cyan('  Step 1: ') + chalk.white('System Settings is opening...'));
-          console.log(chalk.cyan('  Step 2: ') + chalk.white('Click the ') + chalk.yellow('+') + chalk.white(' button'));
-          console.log(chalk.cyan('  Step 3: ') + chalk.white('Add ') + chalk.yellow('Terminal') + chalk.white(' (or iTerm/VS Code)'));
+          console.log(chalk.cyan('  Step 1: ') + chalk.white('Open ') + chalk.yellow('System Settings'));
+          console.log(chalk.cyan('  Step 2: ') + chalk.white('Go to ') + chalk.yellow('Privacy & Security → Full Disk Access'));
+          console.log(chalk.cyan('  Step 3: ') + chalk.white('Click ') + chalk.yellow('+') + chalk.white(' and add ') + chalk.yellow('Terminal'));
           console.log(chalk.cyan('  Step 4: ') + chalk.white('Quit Terminal completely ') + chalk.gray('(Cmd+Q)'));
           console.log(chalk.cyan('  Step 5: ') + chalk.white('Reopen Terminal and try again\n'));
-
-          // Open System Settings
-          try {
-            execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
-          } catch {}
         } else {
           console.log(chalk.yellow('\n  Try running as administrator.\n'));
         }

@@ -272,10 +272,12 @@ node src/index.js arrange -g 100 -c 3     # 3 columns
 node src/index.js tokens ds
 ```
 
-"Add Tailwind colors"
+"Add Tailwind/shadcn primitive colors" (slate, gray, blue, red, etc. with 50-950 shades)
 ```bash
 node src/index.js tokens tailwind
 ```
+
+**Note:** This creates 22 color families (slate, gray, zinc, neutral, stone, red, orange, amber, yellow, lime, green, emerald, teal, cyan, sky, blue, indigo, violet, purple, fuchsia, pink, rose) with 11 shades each (50-950). These are the Tailwind CSS colors that shadcn/ui is built on. NOT the shadcn/ui semantic colors (background, foreground, card, etc.).
 
 "Create spacing tokens"
 ```bash
@@ -291,6 +293,17 @@ node src/index.js var list
 ```bash
 node src/index.js var create "primary/500" -c "CollectionId" -t COLOR -v "#3b82f6"
 ```
+
+### "Create shadcn colors" or "Create Tailwind colors"
+
+When users ask for "shadcn colors" or "Tailwind colors", they usually mean the **primitive color palette** (22 color families with 50-950 shades), NOT the shadcn/ui semantic colors (background, foreground, etc.).
+
+```bash
+# Create Tailwind/shadcn primitive colors (242 variables)
+node src/index.js tokens tailwind
+```
+
+This creates: slate, gray, zinc, neutral, stone, red, orange, amber, yellow, lime, green, emerald, teal, cyan, sky, blue, indigo, violet, purple, fuchsia, pink, rose (each with 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950).
 
 ### Visualize Color Palette on Canvas
 

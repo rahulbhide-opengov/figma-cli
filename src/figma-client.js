@@ -277,18 +277,22 @@ export class FigmaClient {
     const width = props.w || props.width || 320;
     const height = props.h || props.height || 200;
     const bg = props.bg || props.fill || '#ffffff';
+    const stroke = props.stroke || null;
     const rounded = props.rounded || props.radius || 0;
     const flex = props.flex || 'col';
     const gap = props.gap || 0;
     const p = props.p || props.padding || 0;
-    const x = props.x || 0;
+    const px = props.px || p;
+    const py = props.py || p;
+    const useSmartPos = props.x === undefined;
+    const explicitX = props.x || 0;
     const y = props.y || 0;
 
     // Build font loading
     const fonts = new Set();
     textElements.forEach(t => {
       const weight = t.weight || 'regular';
-      const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : 'Regular';
+      const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
       fonts.add(style);
     });
 
@@ -299,7 +303,7 @@ export class FigmaClient {
     // Build text creation
     const textCode = textElements.map((t, i) => {
       const weight = t.weight || 'regular';
-      const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : 'Regular';
+      const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
       const size = t.size || 14;
       const color = t.color || '#000000';
       const fillWidth = t.w === 'fill';
@@ -315,20 +319,36 @@ export class FigmaClient {
       `;
     }).join('\n');
 
+    // Smart positioning code: find next free X position
+    const smartPosCode = useSmartPos ? `
+        let smartX = 0;
+        const children = figma.currentPage.children;
+        if (children.length > 0) {
+          children.forEach(n => { smartX = Math.max(smartX, n.x + n.width); });
+          smartX += 100;
+        }
+    ` : `const smartX = ${explicitX};`;
+
     return `
       (async function() {
         await Promise.all([${fontLoads}]);
 
+        ${smartPosCode}
+
         const frame = figma.createFrame();
         frame.name = ${JSON.stringify(name)};
         frame.resize(${width}, ${height});
-        frame.x = ${x};
+        frame.x = smartX;
         frame.y = ${y};
         frame.cornerRadius = ${rounded};
         frame.fills = [{type:'SOLID',color:${this.hexToRgbCode(bg)}}];
+        ${stroke ? `frame.strokes = [{type:'SOLID',color:${this.hexToRgbCode(stroke)}}]; frame.strokeWeight = 1;` : ''}
         frame.layoutMode = '${flex === 'row' ? 'HORIZONTAL' : 'VERTICAL'}';
         frame.itemSpacing = ${gap};
-        frame.paddingTop = frame.paddingBottom = frame.paddingLeft = frame.paddingRight = ${p};
+        frame.paddingTop = ${py};
+        frame.paddingBottom = ${py};
+        frame.paddingLeft = ${px};
+        frame.paddingRight = ${px};
         frame.primaryAxisSizingMode = 'FIXED';
         frame.counterAxisSizingMode = 'FIXED';
         frame.clipsContent = true;

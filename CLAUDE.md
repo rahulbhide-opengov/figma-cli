@@ -24,6 +24,12 @@ npx figma-use arrange --mode column --gap 20
 # Inspect node structure
 npx figma-use node tree "2:123"
 
+# Check variable bindings
+npx figma-use node bindings "2:123"
+
+# Move nodes
+npx figma-use node move "2:123" --x 100 --y 200
+
 # Delete nodes
 npx figma-use node delete "2:123"
 
@@ -33,6 +39,14 @@ npx figma-use selection set "2:123 2:124"
 # Convert frames to components
 npx figma-use node to-component "2:123"
 ```
+
+## Key Learnings
+
+1. **Use `render` for complex designs** - JSX handles fonts and nesting automatically
+2. **Use `npx figma-use` directly** - Faster than wrapper commands, especially with daemon
+3. **Bind variables with script files** - Write JS to `/tmp/script.js`, run with `npx figma-use eval "$(cat /tmp/script.js)"`
+4. **Verify with `node bindings`** - Check if fills/strokes are bound to variables
+5. **Clean up with `arrange`** - Shows all top-level elements and organizes them
 
 ## What Users Might Ask → Commands
 

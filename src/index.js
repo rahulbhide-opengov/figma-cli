@@ -1701,6 +1701,155 @@ create
     }
   });
 
+// ============ REMOVE BACKGROUND ============
+
+program
+  .command('remove-bg [nodeId]')
+  .alias('removebg')
+  .description('Remove background from selected image (uses remove.bg API)')
+  .option('--api-key <key>', 'Remove.bg API key')
+  .action(async (nodeId, options) => {
+    checkConnection();
+
+    // Get API key from option, env var, or config
+    const config = loadConfig();
+    const apiKey = options.apiKey || process.env.REMOVEBG_API_KEY || config.removebgApiKey;
+
+    if (!apiKey) {
+      console.log(chalk.red('✗ Remove.bg API key required\n'));
+      console.log(chalk.white.bold('How to get your API key (free, 50 images/month):\n'));
+      console.log(chalk.gray('  1. Go to ') + chalk.cyan('https://www.remove.bg/api'));
+      console.log(chalk.gray('  2. Click "Get API Key" and sign up'));
+      console.log(chalk.gray('  3. Copy your API key from the dashboard\n'));
+      console.log(chalk.white.bold('Then use one of these methods:\n'));
+      console.log(chalk.cyan('  Option A: ') + chalk.gray('Save permanently'));
+      console.log(chalk.white('    node src/index.js config set removebgApiKey YOUR_KEY\n'));
+      console.log(chalk.cyan('  Option B: ') + chalk.gray('Use once'));
+      console.log(chalk.white('    node src/index.js remove-bg --api-key YOUR_KEY\n'));
+      console.log(chalk.cyan('  Option C: ') + chalk.gray('Environment variable'));
+      console.log(chalk.white('    export REMOVEBG_API_KEY=YOUR_KEY'));
+      return;
+    }
+
+    const spinner = ora('Exporting selected image...').start();
+
+    try {
+      const tempInput = '/tmp/figma-cli-removebg-input.png';
+
+      // Export selected node as PNG
+      let exportCmd = 'export png --scale 2 --output "' + tempInput + '"';
+      if (nodeId) exportCmd += ' --node "' + nodeId + '"';
+      const exportResult = figmaUse(exportCmd, { silent: true });
+
+      if (!existsSync(tempInput)) {
+        throw new Error('Export failed. Select an image or frame first.');
+      }
+
+      spinner.text = 'Removing background via remove.bg...';
+
+      // Read image and send to Remove.bg API
+      const imageBuffer = readFileSync(tempInput);
+      const base64Image = imageBuffer.toString('base64');
+
+      const response = await fetch('https://api.remove.bg/v1.0/removebg', {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_file_b64: base64Image,
+          size: 'auto',
+          format: 'png',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const errorMsg = error.errors?.[0]?.title || 'API request failed';
+        if (response.status === 402) {
+          throw new Error('API credits exhausted. Get more at remove.bg/api');
+        }
+        if (response.status === 403) {
+          throw new Error('Invalid API key. Check your key at remove.bg/api');
+        }
+        throw new Error(errorMsg);
+      }
+
+      // Get result as base64
+      const resultBuffer = Buffer.from(await response.arrayBuffer());
+      const resultBase64 = resultBuffer.toString('base64');
+      const dataUrl = 'data:image/png;base64,' + resultBase64;
+
+      spinner.text = 'Updating image in Figma...';
+
+      // Replace the selected node's fill with the new image
+      const code = `
+(async () => {
+  try {
+    const node = figma.currentPage.selection[0];
+    if (!node) return 'Error: No node selected';
+
+    // Create new image from base64
+    const image = await figma.createImageAsync("${dataUrl}");
+
+    // Replace fills with new image
+    if ('fills' in node) {
+      node.fills = [{ type: 'IMAGE', scaleMode: 'FILL', imageHash: image.hash }];
+      return 'Background removed from ' + node.name;
+    } else {
+      return 'Error: Selected node cannot have image fills';
+    }
+  } catch (e) {
+    return 'Error: ' + e.message;
+  }
+})()
+`;
+
+      const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+
+      if (result && result.includes('Error:')) {
+        spinner.fail(result.trim());
+      } else {
+        spinner.succeed('Background removed!');
+        if (result) console.log(chalk.gray(result.trim()));
+      }
+
+      // Cleanup
+      try { unlinkSync(tempInput); } catch {}
+    } catch (e) {
+      spinner.fail('Failed: ' + e.message);
+    }
+  });
+
+// ============ CONFIG ============
+
+const configCmd = program
+  .command('config')
+  .description('Manage configuration');
+
+configCmd
+  .command('set <key> <value>')
+  .description('Set a config value (e.g., removebgApiKey)')
+  .action((key, value) => {
+    const config = loadConfig();
+    config[key] = value;
+    saveConfig(config);
+    console.log(chalk.green('✓ Config saved: ') + chalk.gray(key + ' = ' + value.substring(0, 10) + '...'));
+  });
+
+configCmd
+  .command('get <key>')
+  .description('Get a config value')
+  .action((key) => {
+    const config = loadConfig();
+    if (config[key]) {
+      console.log(config[key]);
+    } else {
+      console.log(chalk.gray('Not set'));
+    }
+  });
+
 create
   .command('rect [name]')
   .alias('rectangle')

@@ -24,7 +24,7 @@
 
 ## What is This?
 
-A CLI that connects directly to Figma Desktop and gives you complete control:
+A **CLI** (Command Line Interface) is a text-based tool you run in Terminal. Instead of clicking buttons, you type commands. This CLI connects directly to Figma Desktop and gives you complete control:
 
 - **Design Tokens** — Create variables, collections, modes (Light/Dark), bind to nodes
 - **Create Anything** — Frames, text, shapes, icons (150k+ from Iconify), components

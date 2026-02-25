@@ -214,6 +214,13 @@ node src/index.js create image "https://example.com/photo.png" -w 200  # Scale t
 node src/index.js create image "https://example.com/photo.png" -w 200 -h 200  # Fixed size
 ```
 
+"Remove background from image" (select image in Figma first)
+```bash
+node src/index.js remove-bg
+```
+Note: Requires remove.bg API key (free, 50 images/month). Get one at https://www.remove.bg/api
+Then save it: `node src/index.js config set removebgApiKey YOUR_KEY`
+
 "Group selection"
 ```bash
 node src/index.js create group "Header"

@@ -12,7 +12,7 @@ import { homedir, platform } from 'os';
 import { createServer } from 'http';
 import { FigJamClient } from './figjam-client.js';
 import { FigmaClient } from './figma-client.js';
-import { isPatched, patchFigma, getFigmaCommand } from './figma-patch.js';
+import { isPatched, patchFigma, unpatchFigma, getFigmaCommand } from './figma-patch.js';
 
 // Daemon configuration
 const DAEMON_PORT = 3456;
@@ -654,6 +654,43 @@ program
       return;
     }
     figmaUse('status');
+  });
+
+// ============ UNPATCH ============
+
+program
+  .command('unpatch')
+  .description('Restore Figma to original state (removes remote debugging patch)')
+  .action(() => {
+    const spinner = ora('Checking Figma patch status...').start();
+
+    try {
+      const patchStatus = isPatched();
+
+      if (patchStatus === false) {
+        spinner.succeed('Figma is already in original state (not patched)');
+        return;
+      }
+
+      if (patchStatus === null) {
+        spinner.warn('Cannot determine patch status. Figma version may be incompatible.');
+        return;
+      }
+
+      spinner.text = 'Restoring Figma to original state...';
+      unpatchFigma();
+
+      // Update config
+      const config = loadConfig();
+      config.patched = false;
+      saveConfig(config);
+
+      spinner.succeed('Figma restored to original state');
+      console.log(chalk.gray('  Remote debugging is now blocked by default.'));
+      console.log(chalk.gray('  Run "node src/index.js connect" to re-enable it.'));
+    } catch (err) {
+      spinner.fail(`Failed to unpatch: ${err.message}`);
+    }
   });
 
 // ============ CONNECT ============

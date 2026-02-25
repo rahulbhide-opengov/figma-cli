@@ -90,6 +90,43 @@ export function patchFigma() {
 }
 
 /**
+ * Unpatch Figma to restore original state (re-enables remote debugging block)
+ * @returns {boolean} true if unpatched successfully
+ */
+export function unpatchFigma() {
+  const asarPath = getAsarPath();
+  if (!asarPath) {
+    throw new Error('Cannot detect Figma installation path for this platform');
+  }
+
+  const content = readFileSync(asarPath);
+  const patchIndex = content.indexOf(PATCH_STRING);
+
+  if (patchIndex < 0) {
+    // Check if already unpatched (original state)
+    if (content.includes(BLOCK_STRING)) {
+      return true; // Already in original state
+    }
+    throw new Error('Could not find the patched string. Figma may not have been patched by this tool.');
+  }
+
+  // Restore original
+  BLOCK_STRING.copy(content, patchIndex);
+  writeFileSync(asarPath, content);
+
+  // On macOS, re-sign the app
+  if (process.platform === 'darwin') {
+    try {
+      execSync('codesign --force --deep --sign - /Applications/Figma.app', { stdio: 'ignore' });
+    } catch {
+      // Codesign might fail but unpatch might still work
+    }
+  }
+
+  return true;
+}
+
+/**
  * Get the command to start Figma with remote debugging
  */
 export function getFigmaCommand(port = 9222) {
@@ -125,6 +162,7 @@ export default {
   getAsarPath,
   isPatched,
   patchFigma,
+  unpatchFigma,
   getFigmaCommand,
   getFigmaBinaryPath
 };

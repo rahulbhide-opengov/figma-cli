@@ -444,67 +444,67 @@ node src/index.js fj eval "
 
 ## Creating Designs Best Practices
 
-### WICHTIG: Elemente INNERHALB von Frames erstellen
+### IMPORTANT: Create Elements INSIDE Frames
 
-Wenn der User "erstelle ein Design" sagt:
-1. **Erstelle einen Frame** mit Auto-Layout als Container
-2. **Alle Elemente INNERHALB** des Frames mit `frame.appendChild(element)`
-3. **Nie lose Elemente** direkt auf dem Canvas
+When user says "create a design":
+1. **Create a Frame** with Auto-Layout as container
+2. **All elements INSIDE** the frame using `frame.appendChild(element)`
+3. **Never loose elements** directly on canvas
 
 ```javascript
-// RICHTIG: Frame mit vollständigem Auto-Layout Setup
+// CORRECT: Frame with complete Auto-Layout setup
 const frame = figma.createFrame();
 frame.name = 'Card';
 frame.resize(300, 200);
 frame.cornerRadius = 16;
 
-// Auto-Layout MUSS gesetzt werden
-frame.layoutMode = 'VERTICAL';           // oder 'HORIZONTAL'
-frame.primaryAxisSizingMode = 'FIXED';   // oder 'AUTO' für hug
-frame.counterAxisSizingMode = 'FIXED';   // oder 'AUTO' für hug
-frame.itemSpacing = 12;                  // Gap zwischen children
+// Auto-Layout MUST be set
+frame.layoutMode = 'VERTICAL';           // or 'HORIZONTAL'
+frame.primaryAxisSizingMode = 'FIXED';   // or 'AUTO' for hug
+frame.counterAxisSizingMode = 'FIXED';   // or 'AUTO' for hug
+frame.itemSpacing = 12;                  // Gap between children
 frame.paddingTop = 24;
 frame.paddingBottom = 24;
 frame.paddingLeft = 24;
 frame.paddingRight = 24;
-frame.clipsContent = true;               // Inhalt clippen
+frame.clipsContent = true;               // Clip content
 
-// Text mit FILL width damit er NICHT aus dem Frame rausgeht
+// Text with FILL width so it does NOT overflow the frame
 const title = figma.createText();
 title.characters = 'Title';
-title.layoutSizingHorizontal = 'FILL';   // WICHTIG: Text füllt Breite
+title.layoutSizingHorizontal = 'FILL';   // IMPORTANT: Text fills width
 frame.appendChild(title);
 
 const body = figma.createText();
 body.characters = 'Body text that might be longer';
-body.layoutSizingHorizontal = 'FILL';    // WICHTIG: Text füllt Breite
-body.textAutoResize = 'HEIGHT';          // WICHTIG: Höhe passt sich an
+body.layoutSizingHorizontal = 'FILL';    // IMPORTANT: Text fills width
+body.textAutoResize = 'HEIGHT';          // IMPORTANT: Height adjusts
 frame.appendChild(body);
 ```
 
-### Auto-Layout Text Settings (KRITISCH)
+### Auto-Layout Text Settings (CRITICAL)
 
-Text-Layer die NICHT aus dem Frame rausgehen sollen:
+Text layers that should NOT overflow the frame:
 ```javascript
-text.layoutSizingHorizontal = 'FILL';  // Text füllt Container-Breite
-text.textAutoResize = 'HEIGHT';        // Höhe wächst mit Content (wrapping)
+text.layoutSizingHorizontal = 'FILL';  // Text fills container width
+text.textAutoResize = 'HEIGHT';        // Height grows with content (wrapping)
 ```
 
-Ohne diese Settings geht Text über den Frame-Rand hinaus!
+Without these settings, text will overflow frame boundaries!
 
-### Zwei Ebenen der Positionierung
+### Two Levels of Positioning
 
-1. **Frames auf Canvas** → Smart Positioning (nebeneinander, nie überlappend)
-2. **Elemente in Frame** → appendChild + Auto-Layout
+1. **Frames on Canvas** → Smart Positioning (side by side, never overlapping)
+2. **Elements in Frame** → appendChild + Auto-Layout
 
-### Komplettes Card-Beispiel mit Variables
+### Complete Card Example with Variables
 
 ```javascript
 (async function() {
   await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
 
-  // Variables holen
+  // Get variables
   const cardBg = figma.variables.getVariableById('VariableID:1:5');
   const cardFg = figma.variables.getVariableById('VariableID:1:6');
   const mutedFg = figma.variables.getVariableById('VariableID:1:14');
@@ -518,7 +518,7 @@ Ohne diese Settings geht Text über den Frame-Rand hinaus!
   });
   smartX += 40;
 
-  // Card Frame mit Auto-Layout
+  // Card Frame with Auto-Layout
   const card = figma.createFrame();
   card.name = 'Card';
   card.x = smartX;
@@ -536,7 +536,7 @@ Ohne diese Settings geht Text über den Frame-Rand hinaus!
   card.clipsContent = true;
   card.strokeWeight = 1;
 
-  // Variable binding für Fills
+  // Variable binding for fills
   card.fills = [figma.variables.setBoundVariableForPaint(
     {type:'SOLID',color:{r:1,g:1,b:1}}, 'color', cardBg
   )];
@@ -544,7 +544,7 @@ Ohne diese Settings geht Text über den Frame-Rand hinaus!
     {type:'SOLID',color:{r:0.9,g:0.9,b:0.9}}, 'color', border
   )];
 
-  // Light/Dark Mode setzen
+  // Set Light/Dark Mode
   card.setExplicitVariableModeForCollection(col.id, col.modes[0].modeId);
 
   // Title - FILL width

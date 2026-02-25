@@ -243,6 +243,14 @@ export class FigmaClient {
     // Parse children
     const childElements = this.parseChildren(children);
 
+    // Warn if children content exists but nothing was parsed
+    const trimmedChildren = children.trim();
+    if (trimmedChildren && childElements.length === 0) {
+      console.warn('[render] Warning: Frame has content but no elements were parsed.');
+      console.warn('[render] Content:', trimmedChildren.slice(0, 200) + (trimmedChildren.length > 200 ? '...' : ''));
+      console.warn('[render] Supported elements: <Frame>, <Text>, <Rectangle>, <Rect>, <Image>, <Icon>');
+    }
+
     // Generate code
     return this.generateCode(props, childElements);
   }
@@ -334,6 +342,45 @@ export class FigmaClient {
         textProps.content = match[2];
         textProps._index = idx;
         children.push(textProps);
+      }
+    }
+
+    // Parse Rectangle elements (self-closing)
+    const rectRegex = /<(?:Rectangle|Rect)\s+([^/]*)\s*\/>/g;
+    while ((match = rectRegex.exec(childrenStr)) !== null) {
+      const idx = match.index;
+      const insideFrame = frameRanges.some(r => idx >= r.start && idx < r.end);
+      if (!insideFrame) {
+        const rectProps = this.parseProps(match[1]);
+        rectProps._type = 'rect';
+        rectProps._index = idx;
+        children.push(rectProps);
+      }
+    }
+
+    // Parse Image elements (self-closing) - creates placeholder rectangle
+    const imageRegex = /<Image\s+([^/]*)\s*\/>/g;
+    while ((match = imageRegex.exec(childrenStr)) !== null) {
+      const idx = match.index;
+      const insideFrame = frameRanges.some(r => idx >= r.start && idx < r.end);
+      if (!insideFrame) {
+        const imgProps = this.parseProps(match[1]);
+        imgProps._type = 'image';
+        imgProps._index = idx;
+        children.push(imgProps);
+      }
+    }
+
+    // Parse Icon elements (self-closing) - creates placeholder
+    const iconRegex = /<Icon\s+([^/]*)\s*\/>/g;
+    while ((match = iconRegex.exec(childrenStr)) !== null) {
+      const idx = match.index;
+      const insideFrame = frameRanges.some(r => idx >= r.start && idx < r.end);
+      if (!insideFrame) {
+        const iconProps = this.parseProps(match[1]);
+        iconProps._type = 'icon';
+        iconProps._index = idx;
+        children.push(iconProps);
       }
     }
 
@@ -447,6 +494,49 @@ export class FigmaClient {
         el${idx}.counterAxisAlignItems = '${fAlignVal}';
         ${parentVar}.appendChild(el${idx});
         ${nestedChildren}`;
+        } else if (item._type === 'rect') {
+          // Rectangle element
+          const rWidth = item.w || item.width || 100;
+          const rHeight = item.h || item.height || 100;
+          const rBg = item.bg || item.fill || '#e4e4e7';
+          const rRounded = item.rounded || item.radius || 0;
+          const rName = item.name || 'Rectangle';
+
+          return `
+        const el${idx} = figma.createRectangle();
+        el${idx}.name = ${JSON.stringify(rName)};
+        el${idx}.resize(${rWidth}, ${rHeight});
+        el${idx}.cornerRadius = ${rRounded};
+        el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(rBg)}}];
+        ${parentVar}.appendChild(el${idx});`;
+        } else if (item._type === 'image') {
+          // Image placeholder (gray rectangle with image icon concept)
+          const iWidth = item.w || item.width || 200;
+          const iHeight = item.h || item.height || 150;
+          const iBg = item.bg || '#f4f4f5';
+          const iRounded = item.rounded || item.radius || 8;
+          const iName = item.name || 'Image';
+
+          return `
+        const el${idx} = figma.createRectangle();
+        el${idx}.name = ${JSON.stringify(iName)};
+        el${idx}.resize(${iWidth}, ${iHeight});
+        el${idx}.cornerRadius = ${iRounded};
+        el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(iBg)}}];
+        ${parentVar}.appendChild(el${idx});`;
+        } else if (item._type === 'icon') {
+          // Icon placeholder (small square)
+          const icSize = item.size || item.s || 24;
+          const icBg = item.color || item.c || '#71717a';
+          const icName = item.name || 'Icon';
+
+          return `
+        const el${idx} = figma.createRectangle();
+        el${idx}.name = ${JSON.stringify(icName)};
+        el${idx}.resize(${icSize}, ${icSize});
+        el${idx}.cornerRadius = ${Math.round(icSize / 4)};
+        el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(icBg)}}];
+        ${parentVar}.appendChild(el${idx});`;
         }
         return '';
       }).join('\n');

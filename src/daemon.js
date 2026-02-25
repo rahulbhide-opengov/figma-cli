@@ -15,9 +15,36 @@ const PORT = parseInt(process.env.DAEMON_PORT) || 3456;
 let client = null;
 let isConnecting = false;
 
+// Check if connection is healthy (WebSocket open + figma object exists)
+async function isConnectionHealthy() {
+  if (!client || !client.ws) return false;
+  if (client.ws.readyState !== 1) return false; // 1 = OPEN
+
+  try {
+    // Quick check if figma object exists
+    const result = await Promise.race([
+      client.eval('typeof figma !== "undefined"'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+    ]);
+    return result === true;
+  } catch {
+    return false;
+  }
+}
+
 // Get or create FigmaClient
 async function getClient() {
-  if (client) return client;
+  // Check if existing connection is healthy
+  if (client) {
+    const healthy = await isConnectionHealthy();
+    if (healthy) return client;
+
+    // Connection is stale, close and reconnect
+    console.log('[daemon] Connection stale, reconnecting...');
+    try { client.close(); } catch {}
+    client = null;
+  }
+
   if (isConnecting) {
     // Wait for connection
     while (isConnecting) {
@@ -54,6 +81,23 @@ async function handleRequest(req, res) {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', connected: !!client }));
+    return;
+  }
+
+  // Force reconnect
+  if (req.url === '/reconnect') {
+    try {
+      if (client) {
+        try { client.close(); } catch {}
+        client = null;
+      }
+      await getClient();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'reconnected' }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
     return;
   }
 

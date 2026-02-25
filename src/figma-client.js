@@ -225,23 +225,54 @@ export class FigmaClient {
    * Parse JSX-like syntax to Figma Plugin API code
    */
   parseJSX(jsx) {
-    // Extract component and props
-    const frameMatch = jsx.match(/<Frame\s+([^>]*)>([\s\S]*?)<\/Frame>/);
-    if (!frameMatch) {
+    // Find opening Frame tag
+    const openMatch = jsx.match(/<Frame\s+([^>]*)>/);
+    if (!openMatch) {
       throw new Error('Invalid JSX: must start with <Frame>');
     }
 
-    const propsStr = frameMatch[1];
-    const children = frameMatch[2].trim();
+    const propsStr = openMatch[1];
+    const startIdx = openMatch.index + openMatch[0].length;
+
+    // Find matching closing tag by counting open/close tags
+    const children = this.extractContent(jsx.slice(startIdx), 'Frame');
 
     // Parse props
     const props = this.parseProps(propsStr);
 
-    // Parse children (Text elements)
-    const textElements = this.parseChildren(children);
+    // Parse children
+    const childElements = this.parseChildren(children);
 
     // Generate code
-    return this.generateCode(props, textElements);
+    return this.generateCode(props, childElements);
+  }
+
+  /**
+   * Extract content between matching open/close tags
+   */
+  extractContent(str, tagName) {
+    let depth = 1;
+    let i = 0;
+    const closeTag = `</${tagName}>`;
+
+    while (i < str.length && depth > 0) {
+      const remaining = str.slice(i);
+
+      if (remaining.startsWith(closeTag)) {
+        depth--;
+        if (depth === 0) {
+          return str.slice(0, i);
+        }
+        i += closeTag.length;
+      } else if (remaining.startsWith(`<${tagName} `) || remaining.startsWith(`<${tagName}>`)) {
+        depth++;
+        i++;
+      } else {
+        i++;
+      }
+    }
+
+    return str;
   }
 
   parseProps(propsStr) {
@@ -261,20 +292,58 @@ export class FigmaClient {
   }
 
   parseChildren(childrenStr) {
-    const texts = [];
-    const textRegex = /<Text\s+([^>]*)>([^<]*)<\/Text>/g;
+    const children = [];
+    const frameRanges = [];
+
+    // Find all nested Frame elements using balanced tag matching
+    const frameOpenRegex = /<Frame\s+([^>]*)>/g;
     let match;
 
-    while ((match = textRegex.exec(childrenStr)) !== null) {
-      const textProps = this.parseProps(match[1]);
-      textProps.content = match[2];
-      texts.push(textProps);
+    while ((match = frameOpenRegex.exec(childrenStr)) !== null) {
+      const frameProps = this.parseProps(match[1]);
+      frameProps._type = 'frame';
+      frameProps._index = match.index;
+
+      // Get content between opening and matching closing tag
+      const afterOpen = childrenStr.slice(match.index + match[0].length);
+      const innerContent = this.extractContent(afterOpen, 'Frame');
+
+      // Calculate full frame length
+      const fullLength = match[0].length + innerContent.length + '</Frame>'.length;
+
+      // Recursively parse children of nested frame
+      frameProps._children = this.parseChildren(innerContent);
+      children.push(frameProps);
+
+      // Mark this range as consumed
+      frameRanges.push({ start: match.index, end: match.index + fullLength });
+
+      // Move regex past this frame to avoid re-matching nested frames
+      frameOpenRegex.lastIndex = match.index + fullLength;
     }
 
-    return texts;
+    // Parse Text elements, but skip those inside nested Frames
+    const textRegex = /<Text\s+([^>]*)>([^<]*)<\/Text>/g;
+    while ((match = textRegex.exec(childrenStr)) !== null) {
+      const idx = match.index;
+      // Check if this text is inside a nested frame
+      const insideFrame = frameRanges.some(r => idx >= r.start && idx < r.end);
+      if (!insideFrame) {
+        const textProps = this.parseProps(match[1]);
+        textProps._type = 'text';
+        textProps.content = match[2];
+        textProps._index = idx;
+        children.push(textProps);
+      }
+    }
+
+    // Sort by original position in JSX to maintain order
+    children.sort((a, b) => a._index - b._index);
+
+    return children;
   }
 
-  generateCode(props, textElements) {
+  generateCode(props, children) {
     const name = props.name || 'Frame';
     const width = props.w || props.width || 320;
     const height = props.h || props.height || 200;
@@ -286,44 +355,104 @@ export class FigmaClient {
     const p = props.p || props.padding || 0;
     const px = props.px || p;
     const py = props.py || p;
+    const align = props.align || 'MIN';
+    const justify = props.justify || 'MIN';
     const useSmartPos = props.x === undefined;
     const explicitX = props.x || 0;
     const y = props.y || 0;
 
-    // Build font loading
+    // Collect all fonts recursively
     const fonts = new Set();
-    textElements.forEach(t => {
-      const weight = t.weight || 'regular';
-      const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
-      fonts.add(style);
-    });
+    const collectFonts = (items) => {
+      items.forEach(item => {
+        if (item._type === 'text') {
+          const weight = item.weight || 'regular';
+          const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
+          fonts.add(style);
+        } else if (item._type === 'frame' && item._children) {
+          collectFonts(item._children);
+        }
+      });
+    };
+    collectFonts(children);
 
     const fontLoads = Array.from(fonts)
       .map(s => `figma.loadFontAsync({family:'Inter',style:'${s}'})`)
       .join(',');
 
-    // Build text creation
-    // Order: create → set font → set content → appendChild → set layout properties
-    const textCode = textElements.map((t, i) => {
-      const weight = t.weight || 'regular';
-      const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
-      const size = t.size || 14;
-      const color = t.color || '#000000';
-      const fillWidth = t.w === 'fill';
+    // Generate child code recursively
+    let childCounter = 0;
+    const generateChildCode = (items, parentVar) => {
+      return items.map(item => {
+        const idx = childCounter++;
+        if (item._type === 'text') {
+          const weight = item.weight || 'regular';
+          const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
+          const size = item.size || 14;
+          const color = item.color || '#000000';
+          const fillWidth = item.w === 'fill';
 
-      return `
-        const text${i} = figma.createText();
-        text${i}.fontName = {family:'Inter',style:'${style}'};
-        text${i}.fontSize = ${size};
-        text${i}.characters = ${JSON.stringify(t.content)};
-        text${i}.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
-        frame.appendChild(text${i});
-        ${fillWidth ? `text${i}.layoutSizingHorizontal = 'FILL'; text${i}.textAutoResize = 'HEIGHT';` : ''}
-      `;
-    }).join('\n');
+          return `
+        const el${idx} = figma.createText();
+        el${idx}.fontName = {family:'Inter',style:'${style}'};
+        el${idx}.fontSize = ${size};
+        el${idx}.characters = ${JSON.stringify(item.content)};
+        el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
+        ${parentVar}.appendChild(el${idx});
+        ${fillWidth ? `el${idx}.layoutSizingHorizontal = 'FILL'; el${idx}.textAutoResize = 'HEIGHT';` : ''}`;
+        } else if (item._type === 'frame') {
+          // Nested frame (button, etc.)
+          const fName = item.name || 'Nested Frame';
+          const fWidth = item.w || item.width || 100;
+          const fHeight = item.h || item.height || 40;
+          const fBg = item.bg || item.fill || '#ffffff';
+          const fStroke = item.stroke || null;
+          const fRounded = item.rounded || item.radius || 0;
+          const fFlex = item.flex || 'row';
+          const fGap = item.gap || 0;
+          const fP = item.p || item.padding || 0;
+          const fPx = item.px || fP;
+          const fPy = item.py || fP;
+          const fAlign = item.align || 'center';
+          const fJustify = item.justify || 'center';
 
-    // Smart positioning code: find next free X position
-    // Uses a small initial offset to avoid edge-case issues at (0,0)
+          // Map align/justify to Figma values
+          const alignMap = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH' };
+          const fAlignVal = alignMap[fAlign] || 'CENTER';
+          const fJustifyVal = alignMap[fJustify] || 'CENTER';
+
+          const nestedChildren = item._children ? generateChildCode(item._children, `el${idx}`) : '';
+
+          return `
+        const el${idx} = figma.createFrame();
+        el${idx}.name = ${JSON.stringify(fName)};
+        el${idx}.resize(${fWidth}, ${fHeight});
+        el${idx}.cornerRadius = ${fRounded};
+        el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(fBg)}}];
+        ${fStroke ? `el${idx}.strokes = [{type:'SOLID',color:${this.hexToRgbCode(fStroke)}}]; el${idx}.strokeWeight = 1;` : ''}
+        el${idx}.layoutMode = '${fFlex === 'row' ? 'HORIZONTAL' : 'VERTICAL'}';
+        el${idx}.itemSpacing = ${fGap};
+        el${idx}.paddingTop = ${fPy};
+        el${idx}.paddingBottom = ${fPy};
+        el${idx}.paddingLeft = ${fPx};
+        el${idx}.paddingRight = ${fPx};
+        el${idx}.primaryAxisAlignItems = '${fJustifyVal}';
+        el${idx}.counterAxisAlignItems = '${fAlignVal}';
+        ${parentVar}.appendChild(el${idx});
+        ${nestedChildren}`;
+        }
+        return '';
+      }).join('\n');
+    };
+
+    const childCode = generateChildCode(children, 'frame');
+
+    // Map align/justify to Figma values for root frame
+    const alignMap = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH' };
+    const alignVal = alignMap[align] || 'MIN';
+    const justifyVal = alignMap[justify] || 'MIN';
+
+    // Smart positioning code
     const smartPosCode = useSmartPos ? `
         let smartX = 0;
         const children = figma.currentPage.children;
@@ -339,7 +468,7 @@ export class FigmaClient {
 
     return `
       (async function() {
-        await Promise.all([${fontLoads}]);
+        await Promise.all([${fontLoads || 'figma.loadFontAsync({family:"Inter",style:"Regular"})'}]);
 
         ${smartPosCode}
 
@@ -357,11 +486,13 @@ export class FigmaClient {
         frame.paddingBottom = ${py};
         frame.paddingLeft = ${px};
         frame.paddingRight = ${px};
+        frame.primaryAxisAlignItems = '${justifyVal}';
+        frame.counterAxisAlignItems = '${alignVal}';
         frame.primaryAxisSizingMode = 'FIXED';
         frame.counterAxisSizingMode = 'FIXED';
         frame.clipsContent = true;
 
-        ${textCode}
+        ${childCode}
 
         return { id: frame.id, name: frame.name };
       })()

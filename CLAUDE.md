@@ -207,6 +207,13 @@ node src/index.js create autolayout "Card" -d col -g 16 -p 24 --fill "#ffffff" -
 node src/index.js create icon lucide:star -s 24 -c "#f59e0b"
 ```
 
+"Add an image from URL"
+```bash
+node src/index.js create image "https://example.com/photo.png"
+node src/index.js create image "https://example.com/photo.png" -w 200  # Scale to width
+node src/index.js create image "https://example.com/photo.png" -w 200 -h 200  # Fixed size
+```
+
 "Group selection"
 ```bash
 node src/index.js create group "Header"

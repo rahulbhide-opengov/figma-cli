@@ -1637,6 +1637,71 @@ if (icon) {
   });
 
 create
+  .command('image <url>')
+  .description('Create an image from URL (PNG, JPG, GIF, WebP)')
+  .option('-w, --width <n>', 'Width (auto if not set)')
+  .option('-h, --height <n>', 'Height (auto if not set)')
+  .option('-x <n>', 'X position (auto if not set)')
+  .option('-y <n>', 'Y position', '0')
+  .option('-n, --name <name>', 'Node name', 'Image')
+  .option('--spacing <n>', 'Gap from other elements', '100')
+  .action(async (url, options) => {
+    checkConnection();
+    const spinner = ora('Loading image...').start();
+
+    const code = `
+(async () => {
+  try {
+    // Smart positioning
+    let smartX = 0;
+    if (${options.x === undefined}) {
+      figma.currentPage.children.forEach(n => {
+        smartX = Math.max(smartX, n.x + (n.width || 0));
+      });
+      smartX += ${options.spacing || 100};
+    } else {
+      smartX = ${options.x || 0};
+    }
+
+    // Create image from URL
+    const image = await figma.createImageAsync("${url}");
+    const { width, height } = await image.getSizeAsync();
+
+    // Calculate dimensions
+    let w = ${options.width || 'null'};
+    let h = ${options.height || 'null'};
+    if (w && !h) h = Math.round(height * (w / width));
+    if (h && !w) w = Math.round(width * (h / height));
+    if (!w && !h) { w = width; h = height; }
+
+    // Create rectangle with image fill
+    const rect = figma.createRectangle();
+    rect.name = "${options.name}";
+    rect.resize(w, h);
+    rect.x = smartX;
+    rect.y = ${options.y};
+    rect.fills = [{ type: 'IMAGE', scaleMode: 'FILL', imageHash: image.hash }];
+
+    figma.currentPage.selection = [rect];
+    figma.viewport.scrollAndZoomIntoView([rect]);
+
+    return 'Image created: ' + w + 'x' + h + ' at (' + smartX + ', ${options.y})';
+  } catch (e) {
+    return 'Error: ' + e.message;
+  }
+})()
+`;
+
+    try {
+      const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed('Image created from URL');
+      if (result) console.log(chalk.gray(result.trim()));
+    } catch (e) {
+      spinner.fail('Failed to create image: ' + e.message);
+    }
+  });
+
+create
   .command('rect [name]')
   .alias('rectangle')
   .description('Create a rectangle (auto-positions to avoid overlap)')

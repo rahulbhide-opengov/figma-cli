@@ -999,6 +999,252 @@ export class FigmaClient {
     `);
   }
 
+  // ============ Team Libraries ============
+
+  /**
+   * Get available library variable collections
+   */
+  async getLibraryCollections() {
+    return await this.eval(`
+      (async function() {
+        const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+        return collections.map(c => ({
+          key: c.key,
+          name: c.name,
+          libraryName: c.libraryName
+        }));
+      })()
+    `);
+  }
+
+  /**
+   * Get variables from a library collection
+   */
+  async getLibraryVariables(collectionKey) {
+    return await this.eval(`
+      (async function() {
+        const variables = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(${JSON.stringify(collectionKey)});
+        return variables.map(v => ({
+          key: v.key,
+          name: v.name,
+          resolvedType: v.resolvedType
+        }));
+      })()
+    `);
+  }
+
+  /**
+   * Import a variable from a library by key
+   */
+  async importLibraryVariable(variableKey) {
+    return await this.eval(`
+      (async function() {
+        const variable = await figma.variables.importVariableByKeyAsync(${JSON.stringify(variableKey)});
+        return { id: variable.id, name: variable.name, resolvedType: variable.resolvedType };
+      })()
+    `);
+  }
+
+  /**
+   * Get available library components
+   */
+  async getLibraryComponents() {
+    return await this.eval(`
+      (async function() {
+        // Get all component sets and components from enabled libraries
+        const components = [];
+
+        // Search through all pages for component instances to find library components
+        const instances = figma.root.findAll(n => n.type === 'INSTANCE');
+        const seen = new Set();
+
+        for (const instance of instances) {
+          const mainComponent = await instance.getMainComponentAsync();
+          if (mainComponent && mainComponent.remote && !seen.has(mainComponent.key)) {
+            seen.add(mainComponent.key);
+            components.push({
+              key: mainComponent.key,
+              name: mainComponent.name,
+              description: mainComponent.description || ''
+            });
+          }
+        }
+
+        return components;
+      })()
+    `);
+  }
+
+  /**
+   * Import a component from a library by key
+   */
+  async importLibraryComponent(componentKey) {
+    return await this.eval(`
+      (async function() {
+        const component = await figma.importComponentByKeyAsync(${JSON.stringify(componentKey)});
+        return { id: component.id, name: component.name, key: component.key };
+      })()
+    `);
+  }
+
+  /**
+   * Create an instance of a library component
+   */
+  async createLibraryInstance(componentKey, x, y) {
+    return await this.eval(`
+      (async function() {
+        const component = await figma.importComponentByKeyAsync(${JSON.stringify(componentKey)});
+        const instance = component.createInstance();
+        ${x !== undefined ? `instance.x = ${x};` : ''}
+        ${y !== undefined ? `instance.y = ${y};` : ''}
+        return { id: instance.id, name: instance.name, x: instance.x, y: instance.y };
+      })()
+    `);
+  }
+
+  /**
+   * Get available library styles (color, text, effect)
+   */
+  async getLibraryStyles() {
+    return await this.eval(`
+      (async function() {
+        const styles = {
+          paint: [],
+          text: [],
+          effect: [],
+          grid: []
+        };
+
+        // Get local styles that reference library
+        const paintStyles = figma.getLocalPaintStyles();
+        const textStyles = figma.getLocalTextStyles();
+        const effectStyles = figma.getLocalEffectStyles();
+        const gridStyles = figma.getLocalGridStyles();
+
+        paintStyles.forEach(s => {
+          styles.paint.push({ id: s.id, name: s.name, key: s.key, remote: s.remote });
+        });
+        textStyles.forEach(s => {
+          styles.text.push({ id: s.id, name: s.name, key: s.key, remote: s.remote });
+        });
+        effectStyles.forEach(s => {
+          styles.effect.push({ id: s.id, name: s.name, key: s.key, remote: s.remote });
+        });
+        gridStyles.forEach(s => {
+          styles.grid.push({ id: s.id, name: s.name, key: s.key, remote: s.remote });
+        });
+
+        return styles;
+      })()
+    `);
+  }
+
+  /**
+   * Import a style from a library by key
+   */
+  async importLibraryStyle(styleKey) {
+    return await this.eval(`
+      (async function() {
+        const style = await figma.importStyleByKeyAsync(${JSON.stringify(styleKey)});
+        return { id: style.id, name: style.name, type: style.type };
+      })()
+    `);
+  }
+
+  /**
+   * Apply a library style to a node
+   */
+  async applyLibraryStyle(nodeId, styleKey, styleType = 'fill') {
+    return await this.eval(`
+      (async function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        const style = await figma.importStyleByKeyAsync(${JSON.stringify(styleKey)});
+        const type = ${JSON.stringify(styleType)};
+
+        if (type === 'fill' && 'fillStyleId' in node) {
+          node.fillStyleId = style.id;
+        } else if (type === 'stroke' && 'strokeStyleId' in node) {
+          node.strokeStyleId = style.id;
+        } else if (type === 'text' && 'textStyleId' in node) {
+          node.textStyleId = style.id;
+        } else if (type === 'effect' && 'effectStyleId' in node) {
+          node.effectStyleId = style.id;
+        }
+
+        return { success: true, styleId: style.id, styleName: style.name };
+      })()
+    `);
+  }
+
+  /**
+   * Bind a library variable to a node
+   */
+  async bindLibraryVariable(nodeId, property, variableKey) {
+    return await this.eval(`
+      (async function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        const variable = await figma.variables.importVariableByKeyAsync(${JSON.stringify(variableKey)});
+        const prop = ${JSON.stringify(property)};
+
+        if (prop === 'fill' || prop === 'fills') {
+          node.fills = [figma.variables.setBoundVariableForPaint(
+            {type:'SOLID',color:{r:1,g:1,b:1}}, 'color', variable
+          )];
+        } else if (prop === 'stroke' || prop === 'strokes') {
+          node.strokes = [figma.variables.setBoundVariableForPaint(
+            {type:'SOLID',color:{r:0,g:0,b:0}}, 'color', variable
+          )];
+        } else {
+          node.setBoundVariable(prop, variable);
+        }
+
+        return { success: true, variableId: variable.id, variableName: variable.name };
+      })()
+    `);
+  }
+
+  /**
+   * List all enabled libraries
+   */
+  async getEnabledLibraries() {
+    return await this.eval(`
+      (async function() {
+        const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+        const libraries = new Map();
+
+        collections.forEach(c => {
+          if (!libraries.has(c.libraryName)) {
+            libraries.set(c.libraryName, { name: c.libraryName, collections: [] });
+          }
+          libraries.get(c.libraryName).collections.push({ key: c.key, name: c.name });
+        });
+
+        return Array.from(libraries.values());
+      })()
+    `);
+  }
+
+  /**
+   * Swap a component instance to another library component
+   */
+  async swapComponent(instanceId, newComponentKey) {
+    return await this.eval(`
+      (async function() {
+        const instance = figma.getNodeById(${JSON.stringify(instanceId)});
+        if (!instance || instance.type !== 'INSTANCE') return { error: 'Instance not found' };
+
+        const newComponent = await figma.importComponentByKeyAsync(${JSON.stringify(newComponentKey)});
+        instance.swapComponent(newComponent);
+
+        return { success: true, newComponentName: newComponent.name };
+      })()
+    `);
+  }
+
   close() {
     if (this.ws) {
       this.ws.close();

@@ -77,11 +77,28 @@ CLI for controlling Figma Desktop directly. **No API key required.**
 - List FigJam elements
 - Run JavaScript in FigJam context
 
+### Team Libraries
+
+- List available library variable collections
+- Import variables from libraries
+- Import components from libraries
+- Create instances of library components
+- Import and apply library styles (color, text, effect)
+- Bind library variables to node properties
+- Swap component instances to different library components
+- List all enabled libraries
+
 ### Advanced
 
 - Execute any Figma Plugin API code directly
 - Render complex UI from JSX-like syntax
 - Full programmatic control over Figma
+
+### Not Supported (requires REST API)
+
+- Comments (read/write/delete) - requires Figma API key
+- Version history
+- Team/project management
 
 ## Quick Start
 

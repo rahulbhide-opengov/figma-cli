@@ -1783,6 +1783,109 @@ program
     }
   });
 
+// ============ ANALYZE URL (Playwright) ============
+
+program
+  .command('analyze-url <url>')
+  .alias('analyze')
+  .description('Analyze a webpage with Playwright and extract exact CSS values')
+  .option('-w, --width <n>', 'Viewport width', '1440')
+  .option('-h, --height <n>', 'Viewport height', '900')
+  .option('--screenshot', 'Also save a screenshot')
+  .action(async (url, options) => {
+    const spinner = ora('Analyzing ' + url + ' with Playwright...').start();
+
+    try {
+      // Create analysis script
+      const script = `
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: ${options.width}, height: ${options.height} } });
+
+  await page.goto('${url}', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(3000);
+
+  const data = await page.evaluate(() => {
+    const rgbToHex = (rgb) => {
+      if (!rgb || rgb === 'rgba(0, 0, 0, 0)') return 'transparent';
+      const match = rgb.match(/\\d+/g);
+      if (!match || match.length < 3) return rgb;
+      const [r, g, b] = match.map(Number);
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    };
+
+    const getStyles = (el) => {
+      const cs = window.getComputedStyle(el);
+      return {
+        color: rgbToHex(cs.color),
+        bgColor: rgbToHex(cs.backgroundColor),
+        fontSize: cs.fontSize,
+        fontWeight: cs.fontWeight,
+        fontFamily: cs.fontFamily.split(',')[0].replace(/"/g, '').trim(),
+        borderRadius: cs.borderRadius,
+        border: cs.border,
+        padding: cs.padding
+      };
+    };
+
+    const results = {
+      url: window.location.href,
+      title: document.title,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      bodyBg: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
+      elements: []
+    };
+
+    document.querySelectorAll('h1, h2, h3, h4, button, [role="button"], input, label, [class*="btn"]').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 20 && rect.height > 10 && rect.top < 1200 && rect.top > -50) {
+        results.elements.push({
+          tag: el.tagName.toLowerCase(),
+          text: (el.innerText || el.placeholder || '').slice(0, 80).trim(),
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          ...getStyles(el)
+        });
+      }
+    });
+
+    return results;
+  });
+
+  console.log(JSON.stringify(data, null, 2));
+  ${options.screenshot ? "await page.screenshot({ path: '/tmp/analyze-screenshot.png' });" : ''}
+  await browser.close();
+})();
+`;
+
+      // Write and run script
+      const scriptPath = '/tmp/figma-analyze-url.js';
+      writeFileSync(scriptPath, script);
+
+      const result = execSync(`cd /tmp && node figma-analyze-url.js`, {
+        encoding: 'utf8',
+        timeout: 90000,
+        maxBuffer: 10 * 1024 * 1024
+      });
+
+      spinner.succeed('Page analyzed');
+      console.log(result);
+
+      if (options.screenshot) {
+        console.log(chalk.gray('Screenshot saved: /tmp/analyze-screenshot.png'));
+      }
+
+      // Cleanup
+      try { unlinkSync(scriptPath); } catch {}
+    } catch (e) {
+      spinner.fail('Analysis failed: ' + e.message);
+    }
+  });
+
 // ============ REMOVE BACKGROUND ============
 
 program

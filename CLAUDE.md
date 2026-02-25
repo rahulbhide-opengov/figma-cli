@@ -6,49 +6,65 @@ CLI that controls Figma Desktop directly. No API key needed.
 
 When user asks to "recreate", "rebuild", "copy", or "clone" a website:
 
-### Step 1: Screenshot the URL
+### Step 1: Analyze with Playwright (BEST METHOD)
 ```bash
-npx --yes capture-website-cli "https://example.com/page" --output=/tmp/website-screenshot.png --width=800 --height=900 --overwrite
+node src/index.js analyze-url "https://example.com/page" --screenshot
 ```
 
-### Step 2: View and Analyze the Screenshot
-Use the Read tool to view the screenshot:
-```
-Read /tmp/website-screenshot.png
+This extracts EXACT CSS values:
+- Colors as hex (#2383e2)
+- Font sizes (22px), weights (600), families (inter)
+- Element dimensions (width, height)
+- Border radius, padding
+- Element positions (x, y)
+
+### Step 2: Review the Data
+The output is JSON with all elements:
+```json
+{
+  "bodyBg": "#fffefc",
+  "elements": [
+    { "tag": "h1", "text": "Title", "fontSize": "22px", "fontWeight": "600", "color": "#040404" },
+    { "tag": "button", "text": "Continue", "w": 360, "h": 40, "bgColor": "#2383e2", "borderRadius": "8px" }
+  ]
+}
 ```
 
-Claude can see images! Analyze the screenshot for:
-- Background color
-- Headlines (text, size, weight)
-- Buttons (labels, colors, borders)
-- Input fields
-- Layout structure (spacing, alignment)
-- Dividers
+### Step 3: View Screenshot (Optional)
+```bash
+# Screenshot is saved at /tmp/analyze-screenshot.png
+Read /tmp/analyze-screenshot.png
+```
 
-### Step 3: Build in Figma
-Create the design step by step using `npx figma-use eval`:
+### Step 4: Build in Figma
+Use the exact values from Playwright:
 
 ```javascript
-// Clean canvas
-figma.currentPage.children.forEach(n => n.remove());
+// Convert hex to Figma RGB: #2383e2 → { r: 0.14, g: 0.51, b: 0.89 }
+const hexToRgb = (hex) => {
+  const r = parseInt(hex.slice(1,3), 16) / 255;
+  const g = parseInt(hex.slice(3,5), 16) / 255;
+  const b = parseInt(hex.slice(5,7), 16) / 255;
+  return { r, g, b };
+};
 
-// Create main frame
 const main = figma.createFrame();
-main.name = "Website Recreation";
-main.resize(440, 750);
-main.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
-main.layoutMode = "VERTICAL";
-main.itemSpacing = 24;
-main.paddingTop = 48;
-// ... continue building based on screenshot analysis
+main.fills = [{ type: "SOLID", color: hexToRgb("#fffefc") }];
+// ... use exact dimensions from Playwright
 ```
 
 ### Key Tips
+- **Desktop viewport**: Use `-w 1440` for desktop layouts (default)
+- **Mobile viewport**: Use `-w 375 -h 812` for mobile
 - Load fonts BEFORE creating text: `await figma.loadFontAsync({ family: "Inter", style: "Bold" })`
 - Set `layoutSizingHorizontal = "FILL"` AFTER appending to auto-layout parent
-- Use hex colors: `{ r: 0.14, g: 0.51, b: 0.88 }` for #2482E0
 
-This ensures pixel-accurate recreation because Claude actually SEES the screenshot.
+### Alternative: Screenshot Only
+If Playwright fails, use capture-website-cli:
+```bash
+npx --yes capture-website-cli "https://example.com" --output=/tmp/site.png --width=1440 --height=900
+```
+Then `Read /tmp/site.png` to view and analyze visually.
 
 ## After Setup: Show Designer-Friendly Examples
 

@@ -714,6 +714,19 @@ program
     } catch (e) {
       daemonSpinner.warn('Daemon failed: ' + e.message);
     }
+
+    // Fun welcome message for designers
+    console.log();
+    console.log(chalk.magenta('  ╭─────────────────────────────────────────╮'));
+    console.log(chalk.magenta('  │                                         │'));
+    console.log(chalk.magenta('  │  ') + chalk.yellow('Howdy, designer!') + chalk.magenta('                     │'));
+    console.log(chalk.magenta('  │  ') + chalk.white("Don't be afraid of the terminal!") + chalk.magenta('    │'));
+    console.log(chalk.magenta('  │                                         │'));
+    console.log(chalk.magenta('  │  ') + chalk.cyan('Happy vibe coding!') + chalk.magenta('                    │'));
+    console.log(chalk.magenta('  │  ') + chalk.gray('Sil <3') + chalk.magenta('                                │'));
+    console.log(chalk.magenta('  │                                         │'));
+    console.log(chalk.magenta('  ╰─────────────────────────────────────────╯'));
+    console.log();
   });
 
 // ============ VARIABLES ============

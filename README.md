@@ -378,6 +378,19 @@ Run Command Prompt or PowerShell as Administrator, then run `node src/index.js i
 
 **[Sil Bormüller](https://www.linkedin.com/in/silbormueller/)** — [intodesignsystems.com](https://intodesignsystems.com)
 
+## Powered By
+
+This CLI is built on top of **[figma-use](https://github.com/nicedoc/figma-use)** by [nicedoc](https://github.com/nicedoc) — an excellent Figma CLI with JSX rendering, XPath queries, design linting, and much more.
+
+We use figma-use for:
+- JSX rendering (`render` command)
+- Node operations (`node tree`, `node to-component`, etc.)
+- Design analysis (`analyze colors`, `analyze typography`)
+- Design linting (`lint`)
+- And many other features
+
+**Big thanks to the figma-use team!** 🙏
+
 ## License
 
 MIT

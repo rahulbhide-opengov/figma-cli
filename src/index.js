@@ -2300,6 +2300,30 @@ program
     }
   });
 
+program
+  .command('render-batch')
+  .description('Render multiple JSX frames in one call (fast)')
+  .argument('<jsxArray>', 'JSON array of JSX strings, e.g. \'["<Frame>...</Frame>","<Frame>...</Frame>"]\'')
+  .action(async (jsxArrayStr) => {
+    await checkConnection();
+    try {
+      const jsxArray = JSON.parse(jsxArrayStr);
+      if (!Array.isArray(jsxArray)) {
+        throw new Error('Argument must be a JSON array of JSX strings');
+      }
+      const client = await getFigmaClient();
+      const results = [];
+      for (const jsx of jsxArray) {
+        const result = await client.render(jsx);
+        results.push(result);
+        console.log(chalk.green('✓ Rendered: ' + result.id + ' (' + result.name + ')'));
+      }
+      console.log(chalk.cyan(`\n${results.length} frames created`));
+    } catch (e) {
+      console.log(chalk.red('✗ Batch render failed: ' + e.message));
+    }
+  });
+
 // ============ EXPORT ============
 
 const exp = program

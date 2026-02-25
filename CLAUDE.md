@@ -78,6 +78,21 @@ node src/index.js render '<Frame name="Card" w={300} h={200} bg="#fff" p={24}><T
 node src/index.js eval "const f = figma.createFrame(); f.name = 'Card';"
 ```
 
+## CRITICAL: Multiple Frames = Use render-batch
+
+**NEVER call render multiple times in a loop** - each call spawns a new process (slow).
+
+For multiple frames, use `render-batch` with a JSON array:
+```bash
+node src/index.js render-batch '[
+  "<Frame name=\"Card 1\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 1</Text></Frame>",
+  "<Frame name=\"Card 2\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 2</Text></Frame>",
+  "<Frame name=\"Card 3\" w={300} h={200} bg=\"#fff\" p={24}><Text>Card 3</Text></Frame>"
+]'
+```
+
+This creates all frames in ONE process with ONE connection = much faster.
+
 If you MUST use eval to create elements, ALWAYS include smart positioning code:
 ```javascript
 // Get next free X position FIRST

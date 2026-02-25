@@ -6,14 +6,49 @@ CLI that controls Figma Desktop directly. No API key needed.
 
 When user asks to "recreate", "rebuild", "copy", or "clone" a website:
 
-1. **FIRST** take a screenshot and import as reference:
+### Step 1: Screenshot the URL
 ```bash
-node src/index.js screenshot-url "https://example.com/page"
+npx --yes capture-website-cli "https://example.com/page" --output=/tmp/website-screenshot.png --width=800 --height=900 --overwrite
 ```
 
-2. **THEN** build the design in Figma using the screenshot as visual reference
+### Step 2: View and Analyze the Screenshot
+Use the Read tool to view the screenshot:
+```
+Read /tmp/website-screenshot.png
+```
 
-This ensures pixel-accurate recreation. Do NOT guess or use WebFetch - always screenshot first.
+Claude can see images! Analyze the screenshot for:
+- Background color
+- Headlines (text, size, weight)
+- Buttons (labels, colors, borders)
+- Input fields
+- Layout structure (spacing, alignment)
+- Dividers
+
+### Step 3: Build in Figma
+Create the design step by step using `npx figma-use eval`:
+
+```javascript
+// Clean canvas
+figma.currentPage.children.forEach(n => n.remove());
+
+// Create main frame
+const main = figma.createFrame();
+main.name = "Website Recreation";
+main.resize(440, 750);
+main.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
+main.layoutMode = "VERTICAL";
+main.itemSpacing = 24;
+main.paddingTop = 48;
+// ... continue building based on screenshot analysis
+```
+
+### Key Tips
+- Load fonts BEFORE creating text: `await figma.loadFontAsync({ family: "Inter", style: "Bold" })`
+- Set `layoutSizingHorizontal = "FILL"` AFTER appending to auto-layout parent
+- Use hex colors: `{ r: 0.14, g: 0.51, b: 0.88 }` for #2482E0
+
+This ensures pixel-accurate recreation because Claude actually SEES the screenshot.
 
 ## After Setup: Show Designer-Friendly Examples
 

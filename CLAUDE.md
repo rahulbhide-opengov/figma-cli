@@ -2,6 +2,40 @@
 
 CLI that controls Figma Desktop directly. No API key needed.
 
+## IMPORTANT: Fresh Mac Setup
+
+If `node` command is not found, install Node.js first:
+
+```bash
+# Install Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Add Homebrew to PATH (Apple Silicon Macs)
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# Install Node.js
+brew install node
+
+# Verify
+node -v
+```
+
+Then run the CLI:
+```bash
+node src/index.js connect
+```
+
+## IMPORTANT: macOS Full Disk Access
+
+If you see "permission" or "EPERM" error, Terminal needs Full Disk Access:
+
+1. Open **System Settings**
+2. Go to **Privacy & Security → Full Disk Access**
+3. Click **+** and add **Terminal** (or iTerm/VS Code)
+4. Quit Terminal completely (Cmd+Q)
+5. Reopen Terminal and try again
+
 ## IMPORTANT: Website Recreation Workflow
 
 When user asks to "recreate", "rebuild", "copy", or "clone" a website:

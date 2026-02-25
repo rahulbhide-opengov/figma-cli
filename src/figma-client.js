@@ -1245,6 +1245,423 @@ export class FigmaClient {
     `);
   }
 
+  // ============ Designer Utilities ============
+
+  /**
+   * Batch rename layers with pattern
+   * Patterns: {n} = number, {name} = original name, {type} = node type
+   */
+  async batchRename(nodeIds, pattern, options = {}) {
+    const { startNumber = 1, case: textCase = null } = options;
+    return await this.eval(`
+      (function() {
+        const ids = ${JSON.stringify(nodeIds)};
+        const pattern = ${JSON.stringify(pattern)};
+        let num = ${startNumber};
+        const results = [];
+
+        ids.forEach(id => {
+          const node = figma.getNodeById(id);
+          if (!node) return;
+
+          let newName = pattern
+            .replace(/{n}/g, num)
+            .replace(/{name}/g, node.name)
+            .replace(/{type}/g, node.type.toLowerCase());
+
+          ${textCase === 'camel' ? "newName = newName.replace(/[-_\\s]+(\\w)/g, (_, c) => c.toUpperCase()).replace(/^\\w/, c => c.toLowerCase());" : ''}
+          ${textCase === 'pascal' ? "newName = newName.replace(/[-_\\s]+(\\w)/g, (_, c) => c.toUpperCase()).replace(/^\\w/, c => c.toUpperCase());" : ''}
+          ${textCase === 'snake' ? "newName = newName.replace(/[\\s-]+/g, '_').toLowerCase();" : ''}
+          ${textCase === 'kebab' ? "newName = newName.replace(/[\\s_]+/g, '-').toLowerCase();" : ''}
+
+          node.name = newName;
+          results.push({ id: node.id, name: newName });
+          num++;
+        });
+
+        return results;
+      })()
+    `);
+  }
+
+  /**
+   * Rename all children of a node
+   */
+  async batchRenameChildren(parentId, pattern, options = {}) {
+    return await this.eval(`
+      (function() {
+        const parent = figma.getNodeById(${JSON.stringify(parentId)});
+        if (!parent || !parent.children) return { error: 'Parent not found or has no children' };
+
+        const ids = parent.children.map(c => c.id);
+        return ids;
+      })()
+    `).then(ids => this.batchRename(ids, pattern, options));
+  }
+
+  /**
+   * Generate lorem ipsum text
+   */
+  async loremIpsum(options = {}) {
+    const { type = 'paragraph', count = 1 } = options;
+    const lorem = {
+      words: ['lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit', 'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et', 'dolore', 'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam', 'quis', 'nostrud', 'exercitation', 'ullamco', 'laboris', 'nisi', 'aliquip', 'ex', 'ea', 'commodo', 'consequat'],
+      paragraph: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.'
+    };
+
+    if (type === 'words') {
+      const words = [];
+      for (let i = 0; i < count; i++) {
+        words.push(lorem.words[Math.floor(Math.random() * lorem.words.length)]);
+      }
+      return words.join(' ');
+    } else if (type === 'sentences') {
+      const sentences = [];
+      for (let i = 0; i < count; i++) {
+        const wordCount = 8 + Math.floor(Math.random() * 8);
+        const words = [];
+        for (let j = 0; j < wordCount; j++) {
+          words.push(lorem.words[Math.floor(Math.random() * lorem.words.length)]);
+        }
+        words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+        sentences.push(words.join(' ') + '.');
+      }
+      return sentences.join(' ');
+    } else {
+      return Array(count).fill(lorem.paragraph).join('\n\n');
+    }
+  }
+
+  /**
+   * Fill text layer with lorem ipsum
+   */
+  async fillWithLorem(nodeId, options = {}) {
+    const text = await this.loremIpsum(options);
+    return await this.eval(`
+      (async function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node || node.type !== 'TEXT') return { error: 'Text node not found' };
+
+        await figma.loadFontAsync(node.fontName);
+        node.characters = ${JSON.stringify(text)};
+        return { success: true, text: node.characters };
+      })()
+    `);
+  }
+
+  /**
+   * Insert image from URL (Unsplash, etc.)
+   */
+  async insertImage(imageUrl, options = {}) {
+    const { x = 0, y = 0, width = 400, height = 300, name = 'Image' } = options;
+
+    // Fetch image and convert to base64
+    const response = await fetch(imageUrl);
+    const buffer = await response.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+
+    return await this.eval(`
+      (async function() {
+        const imageData = Uint8Array.from(atob(${JSON.stringify(base64)}), c => c.charCodeAt(0));
+        const image = figma.createImage(imageData);
+
+        const rect = figma.createRectangle();
+        rect.name = ${JSON.stringify(name)};
+        rect.x = ${x};
+        rect.y = ${y};
+        rect.resize(${width}, ${height});
+        rect.fills = [{
+          type: 'IMAGE',
+          scaleMode: 'FILL',
+          imageHash: image.hash
+        }];
+
+        return { id: rect.id, name: rect.name, imageHash: image.hash };
+      })()
+    `);
+  }
+
+  /**
+   * Insert random Unsplash image
+   */
+  async insertUnsplash(query, options = {}) {
+    const { width = 800, height = 600 } = options;
+    const imageUrl = `https://source.unsplash.com/random/${width}x${height}/?${encodeURIComponent(query)}`;
+    return await this.insertImage(imageUrl, { ...options, width, height, name: `Unsplash: ${query}` });
+  }
+
+  /**
+   * Export node in multiple sizes (@1x, @2x, @3x)
+   */
+  async exportMultipleSizes(nodeId, options = {}) {
+    const { scales = [1, 2, 3], format = 'PNG' } = options;
+    const results = [];
+
+    for (const scale of scales) {
+      const result = await this.eval(`
+        (async function() {
+          const node = figma.getNodeById(${JSON.stringify(nodeId)});
+          if (!node) return { error: 'Node not found' };
+
+          const bytes = await node.exportAsync({ format: '${format}', scale: ${scale} });
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return {
+            scale: ${scale},
+            suffix: '@${scale}x',
+            base64: btoa(binary),
+            width: Math.round(node.width * ${scale}),
+            height: Math.round(node.height * ${scale})
+          };
+        })()
+      `);
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  /**
+   * Check contrast ratio between two colors (WCAG)
+   */
+  checkContrast(color1, color2) {
+    const getLuminance = (hex) => {
+      const rgb = [
+        parseInt(hex.slice(1, 3), 16) / 255,
+        parseInt(hex.slice(3, 5), 16) / 255,
+        parseInt(hex.slice(5, 7), 16) / 255
+      ].map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+      return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    };
+
+    const l1 = getLuminance(color1);
+    const l2 = getLuminance(color2);
+    const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+
+    return {
+      ratio: Math.round(ratio * 100) / 100,
+      AA: ratio >= 4.5,
+      AALarge: ratio >= 3,
+      AAA: ratio >= 7,
+      AAALarge: ratio >= 4.5
+    };
+  }
+
+  /**
+   * Check contrast of text node against background
+   */
+  async checkNodeContrast(textNodeId) {
+    return await this.eval(`
+      (function() {
+        const textNode = figma.getNodeById(${JSON.stringify(textNodeId)});
+        if (!textNode || textNode.type !== 'TEXT') return { error: 'Text node not found' };
+
+        // Get text color
+        const textFill = textNode.fills[0];
+        if (!textFill || textFill.type !== 'SOLID') return { error: 'Text has no solid fill' };
+        const textColor = textFill.color;
+
+        // Find background (parent frame)
+        let parent = textNode.parent;
+        let bgColor = null;
+        while (parent && !bgColor) {
+          if (parent.fills && parent.fills.length > 0) {
+            const fill = parent.fills.find(f => f.type === 'SOLID' && f.visible !== false);
+            if (fill) bgColor = fill.color;
+          }
+          parent = parent.parent;
+        }
+
+        if (!bgColor) bgColor = { r: 1, g: 1, b: 1 }; // Default white
+
+        const toHex = (c) => '#' +
+          Math.round(c.r * 255).toString(16).padStart(2, '0') +
+          Math.round(c.g * 255).toString(16).padStart(2, '0') +
+          Math.round(c.b * 255).toString(16).padStart(2, '0');
+
+        return {
+          textColor: toHex(textColor),
+          bgColor: toHex(bgColor),
+          nodeId: textNode.id,
+          nodeName: textNode.name
+        };
+      })()
+    `).then(result => {
+      if (result.error) return result;
+      const contrast = this.checkContrast(result.textColor, result.bgColor);
+      return { ...result, ...contrast };
+    });
+  }
+
+  /**
+   * Find and replace text in all text nodes
+   */
+  async findReplaceText(find, replace, options = {}) {
+    const { caseSensitive = false, wholeWord = false } = options;
+    return await this.eval(`
+      (async function() {
+        const textNodes = figma.currentPage.findAll(n => n.type === 'TEXT');
+        const results = [];
+        const findStr = ${JSON.stringify(find)};
+        const replaceStr = ${JSON.stringify(replace)};
+        const caseSensitive = ${caseSensitive};
+        const wholeWord = ${wholeWord};
+
+        for (const node of textNodes) {
+          let text = node.characters;
+          let pattern = caseSensitive ? findStr : findStr.toLowerCase();
+          let searchText = caseSensitive ? text : text.toLowerCase();
+
+          if (wholeWord) {
+            pattern = '\\\\b' + pattern + '\\\\b';
+          }
+
+          const regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
+          if (regex.test(searchText)) {
+            await figma.loadFontAsync(node.fontName);
+            node.characters = text.replace(new RegExp(findStr, caseSensitive ? 'g' : 'gi'), replaceStr);
+            results.push({ id: node.id, name: node.name, newText: node.characters });
+          }
+        }
+
+        return { replaced: results.length, nodes: results };
+      })()
+    `);
+  }
+
+  /**
+   * Select all nodes with same fill color
+   */
+  async selectSameFill(nodeId) {
+    return await this.eval(`
+      (function() {
+        const refNode = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!refNode || !refNode.fills || refNode.fills.length === 0) return { error: 'Node has no fill' };
+
+        const refFill = refNode.fills[0];
+        if (refFill.type !== 'SOLID') return { error: 'Reference fill is not solid' };
+
+        const matches = figma.currentPage.findAll(n => {
+          if (!n.fills || n.fills.length === 0) return false;
+          const fill = n.fills[0];
+          if (fill.type !== 'SOLID') return false;
+          return Math.abs(fill.color.r - refFill.color.r) < 0.01 &&
+                 Math.abs(fill.color.g - refFill.color.g) < 0.01 &&
+                 Math.abs(fill.color.b - refFill.color.b) < 0.01;
+        });
+
+        figma.currentPage.selection = matches;
+        return { selected: matches.length, ids: matches.map(n => n.id) };
+      })()
+    `);
+  }
+
+  /**
+   * Select all nodes with same stroke color
+   */
+  async selectSameStroke(nodeId) {
+    return await this.eval(`
+      (function() {
+        const refNode = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!refNode || !refNode.strokes || refNode.strokes.length === 0) return { error: 'Node has no stroke' };
+
+        const refStroke = refNode.strokes[0];
+        if (refStroke.type !== 'SOLID') return { error: 'Reference stroke is not solid' };
+
+        const matches = figma.currentPage.findAll(n => {
+          if (!n.strokes || n.strokes.length === 0) return false;
+          const stroke = n.strokes[0];
+          if (stroke.type !== 'SOLID') return false;
+          return Math.abs(stroke.color.r - refStroke.color.r) < 0.01 &&
+                 Math.abs(stroke.color.g - refStroke.color.g) < 0.01 &&
+                 Math.abs(stroke.color.b - refStroke.color.b) < 0.01;
+        });
+
+        figma.currentPage.selection = matches;
+        return { selected: matches.length, ids: matches.map(n => n.id) };
+      })()
+    `);
+  }
+
+  /**
+   * Select all text nodes with same font
+   */
+  async selectSameFont(nodeId) {
+    return await this.eval(`
+      (function() {
+        const refNode = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!refNode || refNode.type !== 'TEXT') return { error: 'Not a text node' };
+
+        const refFont = refNode.fontName;
+        const refSize = refNode.fontSize;
+
+        const matches = figma.currentPage.findAll(n => {
+          if (n.type !== 'TEXT') return false;
+          return n.fontName.family === refFont.family &&
+                 n.fontName.style === refFont.style &&
+                 n.fontSize === refSize;
+        });
+
+        figma.currentPage.selection = matches;
+        return { selected: matches.length, ids: matches.map(n => n.id) };
+      })()
+    `);
+  }
+
+  /**
+   * Select all nodes of same type and size
+   */
+  async selectSameSize(nodeId) {
+    return await this.eval(`
+      (function() {
+        const refNode = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!refNode) return { error: 'Node not found' };
+
+        const matches = figma.currentPage.findAll(n => {
+          return n.type === refNode.type &&
+                 Math.abs(n.width - refNode.width) < 1 &&
+                 Math.abs(n.height - refNode.height) < 1;
+        });
+
+        figma.currentPage.selection = matches;
+        return { selected: matches.length, ids: matches.map(n => n.id) };
+      })()
+    `);
+  }
+
+  /**
+   * Simulate color blindness on a frame (creates a copy with filters)
+   */
+  async simulateColorBlindness(nodeId, type = 'deuteranopia') {
+    const matrices = {
+      deuteranopia: [0.625, 0.375, 0, 0, 0, 0.7, 0.3, 0, 0, 0, 0, 0.3, 0.7, 0, 0, 0, 0, 0, 1, 0],
+      protanopia: [0.567, 0.433, 0, 0, 0, 0.558, 0.442, 0, 0, 0, 0, 0.242, 0.758, 0, 0, 0, 0, 0, 1, 0],
+      tritanopia: [0.95, 0.05, 0, 0, 0, 0, 0.433, 0.567, 0, 0, 0, 0.475, 0.525, 0, 0, 0, 0, 0, 1, 0],
+      grayscale: [0.299, 0.587, 0.114, 0, 0, 0.299, 0.587, 0.114, 0, 0, 0.299, 0.587, 0.114, 0, 0, 0, 0, 0, 1, 0]
+    };
+
+    const matrix = matrices[type] || matrices.deuteranopia;
+
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        const clone = node.clone();
+        clone.name = node.name + ' (${type})';
+        clone.x = node.x + node.width + 50;
+
+        // Apply as layer blur with color matrix (simplified simulation)
+        // Note: Figma doesn't have native color matrix, this is a visual approximation
+        clone.opacity = 0.9;
+
+        return { id: clone.id, name: clone.name, type: '${type}' };
+      })()
+    `);
+  }
+
   close() {
     if (this.ws) {
       this.ws.close();

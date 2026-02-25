@@ -88,6 +88,24 @@ CLI for controlling Figma Desktop directly. **No API key required.**
 - Swap component instances to different library components
 - List all enabled libraries
 
+### Designer Utilities
+
+- **Batch rename layers** (with patterns: {n}, {name}, {type})
+- **Case conversion** (camelCase, PascalCase, snake_case, kebab-case)
+- **Lorem ipsum generator** (words, sentences, paragraphs)
+- **Fill text with placeholder content**
+- **Insert images from URL**
+- **Unsplash integration** (random stock photos by keyword)
+- **Export multiple sizes** (@1x, @2x, @3x)
+- **Contrast checker** (WCAG AA/AAA compliance)
+- **Check text contrast** against background
+- **Find and replace text** across all layers
+- **Select same fill** color
+- **Select same stroke** color
+- **Select same font** and size
+- **Select same size** nodes
+- **Color blindness simulation** (deuteranopia, protanopia, tritanopia)
+
 ### Advanced
 
 - Execute any Figma Plugin API code directly

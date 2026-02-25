@@ -5,7 +5,7 @@
  * Newer Figma versions block --remote-debugging-port by default.
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, accessSync, constants } from 'fs';
 import { execSync } from 'child_process';
 
 // Figma app.asar locations by platform
@@ -53,6 +53,22 @@ export function isPatched() {
 }
 
 /**
+ * Check if we have write access to the Figma app.asar file
+ * @returns {boolean} true if we can write, false otherwise
+ */
+export function canPatchFigma() {
+  const asarPath = getAsarPath();
+  if (!asarPath) return false;
+
+  try {
+    accessSync(asarPath, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Patch Figma to enable remote debugging
  * @returns {boolean} true if patched successfully
  */
@@ -60,6 +76,15 @@ export function patchFigma() {
   const asarPath = getAsarPath();
   if (!asarPath) {
     throw new Error('Cannot detect Figma installation path for this platform');
+  }
+
+  // Check write access first
+  if (!canPatchFigma()) {
+    if (process.platform === 'darwin') {
+      throw new Error('No write access to Figma. Grant Terminal "Full Disk Access" in System Settings → Privacy & Security');
+    } else {
+      throw new Error('No write access to Figma. Try running as administrator.');
+    }
   }
 
   const content = readFileSync(asarPath);
@@ -161,6 +186,7 @@ export function getFigmaBinaryPath() {
 export default {
   getAsarPath,
   isPatched,
+  canPatchFigma,
   patchFigma,
   unpatchFigma,
   getFigmaCommand,

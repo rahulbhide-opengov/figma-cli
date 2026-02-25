@@ -67,6 +67,16 @@ No explaining. No teaching. Just ask.
 - Figma Desktop (free account works)
 - macOS, Windows, or Linux
 
+### ⚠️ macOS: Full Disk Access Required
+
+On macOS, your Terminal needs **Full Disk Access** permission to patch Figma. **Do this first:**
+
+1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+2. Click **+** and add your terminal app (Terminal, iTerm, VS Code, Warp, etc.)
+3. **Restart your terminal** (quit completely and reopen)
+
+Without this, the CLI cannot connect to Figma.
+
 ## Installation
 
 ### Option A: Download ZIP (Simple)

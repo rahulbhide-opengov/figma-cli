@@ -277,6 +277,51 @@ node src/index.js var list
 node src/index.js var create "primary/500" -c "CollectionId" -t COLOR -v "#3b82f6"
 ```
 
+### Visualize Color Palette on Canvas
+
+Create color swatches bound to variables for any color system:
+
+**Step 1: Create color palette frames with render**
+```bash
+# Create a row of color swatches for one color family
+node src/index.js render '<Frame name="blue" flex="row" x={0} y={0}>
+  <Frame name="50" w={80} h={60} bg="#eff6ff" />
+  <Frame name="100" w={80} h={60} bg="#dbeafe" />
+  <Frame name="500" w={80} h={60} bg="#3b82f6" />
+  <Frame name="900" w={80} h={60} bg="#1e3a8a" />
+</Frame>'
+```
+
+**Step 2: Bind swatches to variables**
+```javascript
+// Save as /tmp/bind-palette.js, then run: npx figma-use eval "$(cat /tmp/bind-palette.js)"
+const colors = [
+  { name: 'blue', frameId: '2:123' },  // Replace with actual frame IDs
+  { name: 'red', frameId: '2:456' }
+];
+const shades = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+
+const allVars = figma.variables.getLocalVariables('COLOR');
+colors.forEach(color => {
+  const parentFrame = figma.getNodeById(color.frameId);
+  if (!parentFrame) return;
+  parentFrame.children.forEach((swatch, i) => {
+    const varName = color.name + '/' + shades[i];
+    const variable = allVars.find(v => v.name === varName);
+    if (variable && swatch.type === 'FRAME') {
+      swatch.fills = [figma.variables.setBoundVariableForPaint(
+        { type: 'SOLID', color: { r: 1, g: 1, b: 1 } }, 'color', variable
+      )];
+    }
+  });
+});
+```
+
+**Step 3: Verify bindings**
+```bash
+npx figma-use node bindings "2:123"  # Check if fills show $blue/50
+```
+
 ### FigJam
 
 "List FigJam pages"

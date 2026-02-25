@@ -699,20 +699,9 @@ program
   .command('connect')
   .description('Start Figma with remote debugging enabled')
   .action(async () => {
-    // Fun welcome message for designers (shown first!)
-    console.log();
-    console.log(chalk.hex('#FF6B35')('  ██   ██ ███████ ██    ██ ██'));
-    console.log(chalk.hex('#FF8C42')('  ██   ██ ██       ██  ██  ██'));
-    console.log(chalk.hex('#FFE66D')('  ███████ █████     ████   ██'));
-    console.log(chalk.hex('#4ECDC4')('  ██   ██ ██         ██    '));
-    console.log(chalk.hex('#45B7AA')('  ██   ██ ███████    ██    ██'));
-    console.log();
-    console.log(chalk.white('  ✨ Don\'t be afraid of the terminal!'));
-    console.log();
-    console.log(chalk.hex('#4ECDC4')('  🎨 Happy vibe coding!'));
-    console.log();
-    console.log(chalk.gray('  Sil · ') + chalk.hex('#FF6B35')('intodesignsystems.com'));
-    console.log();
+    // Fun welcome message (compact: 2 lines so Claude Code doesn't collapse it)
+    console.log(chalk.hex('#FF6B35')('\n  ✨ Hey designer! ') + chalk.white("Don't be afraid of the terminal!"));
+    console.log(chalk.hex('#4ECDC4')('  🎨 Happy vibe coding! ') + chalk.gray('— Sil · ') + chalk.hex('#FF6B35')('intodesignsystems.com\n'));
 
     const config = loadConfig();
 

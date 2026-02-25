@@ -586,6 +586,419 @@ export class FigmaClient {
     `);
   }
 
+  // ============ Create Primitives ============
+
+  /**
+   * Create a frame
+   */
+  async createFrame(options = {}) {
+    const { name = 'Frame', width = 100, height = 100, x, y, fill = '#ffffff', radius = 0 } = options;
+    return await this.eval(`
+      (function() {
+        const frame = figma.createFrame();
+        frame.name = ${JSON.stringify(name)};
+        frame.resize(${width}, ${height});
+        ${x !== undefined ? `frame.x = ${x};` : ''}
+        ${y !== undefined ? `frame.y = ${y};` : ''}
+        frame.cornerRadius = ${radius};
+        frame.fills = [{type:'SOLID',color:${this.hexToRgbCode(fill)}}];
+        return { id: frame.id, name: frame.name, x: frame.x, y: frame.y };
+      })()
+    `);
+  }
+
+  /**
+   * Create a rectangle
+   */
+  async createRectangle(options = {}) {
+    const { name = 'Rectangle', width = 100, height = 100, x, y, fill = '#d9d9d9', radius = 0 } = options;
+    return await this.eval(`
+      (function() {
+        const rect = figma.createRectangle();
+        rect.name = ${JSON.stringify(name)};
+        rect.resize(${width}, ${height});
+        ${x !== undefined ? `rect.x = ${x};` : ''}
+        ${y !== undefined ? `rect.y = ${y};` : ''}
+        rect.cornerRadius = ${radius};
+        rect.fills = [{type:'SOLID',color:${this.hexToRgbCode(fill)}}];
+        return { id: rect.id, name: rect.name };
+      })()
+    `);
+  }
+
+  /**
+   * Create an ellipse/circle
+   */
+  async createEllipse(options = {}) {
+    const { name = 'Ellipse', width = 100, height = 100, x, y, fill = '#d9d9d9' } = options;
+    return await this.eval(`
+      (function() {
+        const ellipse = figma.createEllipse();
+        ellipse.name = ${JSON.stringify(name)};
+        ellipse.resize(${width}, ${height || width});
+        ${x !== undefined ? `ellipse.x = ${x};` : ''}
+        ${y !== undefined ? `ellipse.y = ${y};` : ''}
+        ellipse.fills = [{type:'SOLID',color:${this.hexToRgbCode(fill)}}];
+        return { id: ellipse.id, name: ellipse.name };
+      })()
+    `);
+  }
+
+  /**
+   * Create a text node
+   */
+  async createText(options = {}) {
+    const { content = 'Text', x, y, size = 14, color = '#000000', weight = 'Regular' } = options;
+    const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : 'Regular';
+    return await this.eval(`
+      (async function() {
+        await figma.loadFontAsync({family:'Inter',style:'${style}'});
+        const text = figma.createText();
+        text.fontName = {family:'Inter',style:'${style}'};
+        text.fontSize = ${size};
+        text.characters = ${JSON.stringify(content)};
+        text.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
+        ${x !== undefined ? `text.x = ${x};` : ''}
+        ${y !== undefined ? `text.y = ${y};` : ''}
+        return { id: text.id, characters: text.characters };
+      })()
+    `);
+  }
+
+  /**
+   * Create a line
+   */
+  async createLine(options = {}) {
+    const { length = 100, x, y, color = '#000000', strokeWeight = 1 } = options;
+    return await this.eval(`
+      (function() {
+        const line = figma.createLine();
+        line.resize(${length}, 0);
+        ${x !== undefined ? `line.x = ${x};` : ''}
+        ${y !== undefined ? `line.y = ${y};` : ''}
+        line.strokes = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
+        line.strokeWeight = ${strokeWeight};
+        return { id: line.id };
+      })()
+    `);
+  }
+
+  /**
+   * Create an auto-layout frame
+   */
+  async createAutoLayout(options = {}) {
+    const {
+      name = 'AutoLayout',
+      direction = 'VERTICAL',
+      gap = 8,
+      padding = 16,
+      width, height, x, y,
+      fill = '#ffffff',
+      radius = 0
+    } = options;
+    return await this.eval(`
+      (function() {
+        const frame = figma.createFrame();
+        frame.name = ${JSON.stringify(name)};
+        frame.layoutMode = '${direction === 'row' || direction === 'HORIZONTAL' ? 'HORIZONTAL' : 'VERTICAL'}';
+        frame.itemSpacing = ${gap};
+        frame.paddingTop = frame.paddingBottom = frame.paddingLeft = frame.paddingRight = ${padding};
+        frame.primaryAxisSizingMode = 'AUTO';
+        frame.counterAxisSizingMode = 'AUTO';
+        ${width ? `frame.resize(${width}, ${height || width}); frame.primaryAxisSizingMode = 'FIXED'; frame.counterAxisSizingMode = 'FIXED';` : ''}
+        ${x !== undefined ? `frame.x = ${x};` : ''}
+        ${y !== undefined ? `frame.y = ${y};` : ''}
+        frame.cornerRadius = ${radius};
+        frame.fills = [{type:'SOLID',color:${this.hexToRgbCode(fill)}}];
+        return { id: frame.id, name: frame.name };
+      })()
+    `);
+  }
+
+  // ============ Query & Find ============
+
+  /**
+   * Find nodes by name (partial match)
+   */
+  async findByName(name, type = null) {
+    return await this.eval(`
+      (function() {
+        const results = [];
+        function search(node) {
+          if (node.name && node.name.includes(${JSON.stringify(name)})) {
+            ${type ? `if (node.type === '${type}')` : ''} {
+              results.push({ id: node.id, type: node.type, name: node.name });
+            }
+          }
+          if (node.children) node.children.forEach(search);
+        }
+        search(figma.currentPage);
+        return results.slice(0, 100);
+      })()
+    `);
+  }
+
+  /**
+   * Find nodes by type
+   */
+  async findByType(type) {
+    return await this.eval(`
+      figma.currentPage.findAll(n => n.type === '${type}').slice(0, 100).map(n => ({
+        id: n.id, name: n.name, x: Math.round(n.x), y: Math.round(n.y)
+      }))
+    `);
+  }
+
+  // ============ Variables ============
+
+  /**
+   * Create a variable
+   */
+  async createVariable(options = {}) {
+    const { name, collectionId, type = 'COLOR', value } = options;
+    return await this.eval(`
+      (function() {
+        const col = figma.variables.getVariableCollectionById(${JSON.stringify(collectionId)});
+        if (!col) return { error: 'Collection not found' };
+        const variable = figma.variables.createVariable(${JSON.stringify(name)}, col, '${type}');
+        ${value ? `variable.setValueForMode(col.defaultModeId, ${type === 'COLOR' ? this.hexToRgbCode(value) : JSON.stringify(value)});` : ''}
+        return { id: variable.id, name: variable.name };
+      })()
+    `);
+  }
+
+  /**
+   * Create a variable collection
+   */
+  async createCollection(name) {
+    return await this.eval(`
+      (function() {
+        const col = figma.variables.createVariableCollection(${JSON.stringify(name)});
+        return { id: col.id, name: col.name, defaultModeId: col.defaultModeId };
+      })()
+    `);
+  }
+
+  /**
+   * Bind a variable to a node property
+   */
+  async bindVariable(nodeId, property, variableName) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        const allVars = figma.variables.getLocalVariables();
+        const variable = allVars.find(v => v.name === ${JSON.stringify(variableName)});
+        if (!variable) return { error: 'Variable not found: ' + ${JSON.stringify(variableName)} };
+
+        const prop = ${JSON.stringify(property)};
+        if (prop === 'fill' || prop === 'fills') {
+          node.fills = [figma.variables.setBoundVariableForPaint(
+            {type:'SOLID',color:{r:1,g:1,b:1}}, 'color', variable
+          )];
+        } else if (prop === 'stroke' || prop === 'strokes') {
+          node.strokes = [figma.variables.setBoundVariableForPaint(
+            {type:'SOLID',color:{r:0,g:0,b:0}}, 'color', variable
+          )];
+        } else {
+          node.setBoundVariable(prop, variable);
+        }
+        return { success: true, nodeId: node.id, property: prop, variable: variable.name };
+      })()
+    `);
+  }
+
+  // ============ Components ============
+
+  /**
+   * Create a component from a frame
+   */
+  async createComponent(nodeId) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+        const component = figma.createComponentFromNode(node);
+        return { id: component.id, name: component.name };
+      })()
+    `);
+  }
+
+  /**
+   * Create an instance of a component
+   */
+  async createInstance(componentId, x, y) {
+    return await this.eval(`
+      (function() {
+        const comp = figma.getNodeById(${JSON.stringify(componentId)});
+        if (!comp || comp.type !== 'COMPONENT') return { error: 'Component not found' };
+        const instance = comp.createInstance();
+        ${x !== undefined ? `instance.x = ${x};` : ''}
+        ${y !== undefined ? `instance.y = ${y};` : ''}
+        return { id: instance.id, name: instance.name, x: instance.x, y: instance.y };
+      })()
+    `);
+  }
+
+  /**
+   * Get all local components
+   */
+  async getComponents() {
+    return await this.eval(`
+      figma.root.findAll(n => n.type === 'COMPONENT').map(c => ({
+        id: c.id, name: c.name, page: c.parent?.parent?.name
+      }))
+    `);
+  }
+
+  // ============ Export ============
+
+  /**
+   * Export a node as PNG (returns base64)
+   */
+  async exportPNG(nodeId, scale = 2) {
+    return await this.eval(`
+      (async function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+        const bytes = await node.exportAsync({ format: 'PNG', scale: ${scale} });
+        // Convert to base64
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return { base64: btoa(binary), width: node.width * ${scale}, height: node.height * ${scale} };
+      })()
+    `);
+  }
+
+  /**
+   * Export a node as SVG
+   */
+  async exportSVG(nodeId) {
+    return await this.eval(`
+      (async function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+        const bytes = await node.exportAsync({ format: 'SVG' });
+        return { svg: String.fromCharCode.apply(null, bytes) };
+      })()
+    `);
+  }
+
+  // ============ Layout ============
+
+  /**
+   * Set auto-layout on a frame
+   */
+  async setAutoLayout(nodeId, options = {}) {
+    const { direction = 'VERTICAL', gap = 8, padding = 0 } = options;
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node || node.type !== 'FRAME') return { error: 'Frame not found' };
+        node.layoutMode = '${direction === 'row' || direction === 'HORIZONTAL' ? 'HORIZONTAL' : 'VERTICAL'}';
+        node.itemSpacing = ${gap};
+        node.paddingTop = node.paddingBottom = node.paddingLeft = node.paddingRight = ${padding};
+        return { success: true };
+      })()
+    `);
+  }
+
+  /**
+   * Set sizing mode (hug/fill/fixed)
+   */
+  async setSizing(nodeId, horizontal = 'FIXED', vertical = 'FIXED') {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+        if (node.layoutSizingHorizontal !== undefined) {
+          node.layoutSizingHorizontal = '${horizontal}';
+          node.layoutSizingVertical = '${vertical}';
+        }
+        return { success: true };
+      })()
+    `);
+  }
+
+  // ============ Icon (Iconify) ============
+
+  /**
+   * Create an icon from Iconify
+   * @param {string} iconName - e.g., "lucide:star", "mdi:home"
+   */
+  async createIcon(iconName, options = {}) {
+    const { size = 24, color = '#000000', x, y } = options;
+    const [prefix, name] = iconName.split(':');
+
+    // Fetch SVG from Iconify API
+    const response = await fetch(`https://api.iconify.design/${prefix}/${name}.svg?width=${size}&height=${size}`);
+    const svg = await response.text();
+
+    return await this.eval(`
+      (function() {
+        const svgString = ${JSON.stringify(svg)};
+        const node = figma.createNodeFromSvg(svgString);
+        node.name = ${JSON.stringify(iconName)};
+        ${x !== undefined ? `node.x = ${x};` : ''}
+        ${y !== undefined ? `node.y = ${y};` : ''}
+        // Apply color
+        function colorize(n) {
+          if (n.fills && n.fills.length > 0) {
+            n.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
+          }
+          if (n.children) n.children.forEach(colorize);
+        }
+        colorize(node);
+        return { id: node.id, name: node.name };
+      })()
+    `);
+  }
+
+  // ============ Delete All ============
+
+  /**
+   * Delete all nodes on current page
+   */
+  async deleteAll() {
+    return await this.eval(`
+      (function() {
+        const count = figma.currentPage.children.length;
+        figma.currentPage.children.forEach(n => n.remove());
+        return { deleted: count };
+      })()
+    `);
+  }
+
+  /**
+   * Zoom to fit all content
+   */
+  async zoomToFit() {
+    return await this.eval(`
+      (function() {
+        figma.viewport.scrollAndZoomIntoView(figma.currentPage.children);
+        return { success: true };
+      })()
+    `);
+  }
+
+  /**
+   * Group nodes
+   */
+  async groupNodes(nodeIds, name = 'Group') {
+    return await this.eval(`
+      (function() {
+        const nodes = ${JSON.stringify(nodeIds)}.map(id => figma.getNodeById(id)).filter(n => n);
+        if (nodes.length === 0) return { error: 'No nodes found' };
+        const group = figma.group(nodes, figma.currentPage);
+        group.name = ${JSON.stringify(name)};
+        return { id: group.id, name: group.name, childCount: nodes.length };
+      })()
+    `);
+  }
+
   close() {
     if (this.ws) {
       this.ws.close();

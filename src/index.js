@@ -699,12 +699,28 @@ program
   .command('connect')
   .description('Start Figma with remote debugging enabled')
   .action(async () => {
-    // Check if first run
     const config = loadConfig();
+
+    // Auto-patch Figma if needed (first run)
     if (!config.patched) {
-      console.log(chalk.yellow('\n⚠ First time? Run the setup wizard:\n'));
-      console.log(chalk.cyan('  figma-ds-cli init\n'));
-      return;
+      const patchSpinner = ora('First run: patching Figma for remote debugging...').start();
+      try {
+        const patchStatus = isPatched();
+        if (patchStatus === true) {
+          patchSpinner.succeed('Figma already patched');
+        } else if (patchStatus === false) {
+          patchFigma();
+          patchSpinner.succeed('Figma patched successfully');
+        } else {
+          patchSpinner.succeed('Figma ready (no patch needed)');
+        }
+        config.patched = true;
+        saveConfig(config);
+      } catch (err) {
+        patchSpinner.fail('Failed to patch Figma: ' + err.message);
+        console.log(chalk.yellow('\nTry running: node src/index.js init\n'));
+        return;
+      }
     }
 
     // Stop any existing daemon
@@ -754,15 +770,15 @@ program
 
     // Fun welcome message for designers
     console.log();
-    console.log(chalk.magenta('  ╭─────────────────────────────────────────╮'));
-    console.log(chalk.magenta('  │                                         │'));
-    console.log(chalk.magenta('  │  ') + chalk.yellow('Howdy, designer!') + chalk.magenta('                     │'));
-    console.log(chalk.magenta('  │  ') + chalk.white("Don't be afraid of the terminal!") + chalk.magenta('    │'));
-    console.log(chalk.magenta('  │                                         │'));
-    console.log(chalk.magenta('  │  ') + chalk.cyan('Happy vibe coding!') + chalk.magenta('                    │'));
-    console.log(chalk.magenta('  │  ') + chalk.gray('Sil <3') + chalk.magenta('                                │'));
-    console.log(chalk.magenta('  │                                         │'));
-    console.log(chalk.magenta('  ╰─────────────────────────────────────────╯'));
+    console.log(chalk.hex('#FF6B35')('  ╭─────────────────────────────────────────────╮'));
+    console.log(chalk.hex('#FF6B35')('  │                                             │'));
+    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.hex('#FFE66D').bold('Hey designer!') + chalk.hex('#FF6B35')('                            │'));
+    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.white("Don't be afraid of the terminal!") + chalk.hex('#FF6B35')('        │'));
+    console.log(chalk.hex('#FF6B35')('  │                                             │'));
+    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.hex('#4ECDC4').bold('Happy vibe coding!') + chalk.hex('#FF6B35')('                      │'));
+    console.log(chalk.hex('#FF6B35')('  │                                             │'));
+    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.gray('Sil') + chalk.hex('#FF6B35')('                                          │'));
+    console.log(chalk.hex('#FF6B35')('  ╰─────────────────────────────────────────────╯'));
     console.log();
   });
 

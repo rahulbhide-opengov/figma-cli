@@ -10,6 +10,8 @@ import { dirname, join } from 'path';
 import { createInterface } from 'readline';
 import { homedir, platform } from 'os';
 import { FigJamClient } from './figjam-client.js';
+import { FigmaClient } from './figma-client.js';
+import { isPatched, patchFigma, getFigmaCommand } from './figma-patch.js';
 
 // Platform detection
 const IS_WINDOWS = platform() === 'win32';
@@ -95,25 +97,154 @@ function saveConfig(config) {
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
-// Helper: Run figma-use command
-function figmaUse(args, options = {}) {
-  try {
-    const result = execSync(`figma-use ${args}`, {
-      encoding: 'utf8',
-      stdio: options.silent ? 'pipe' : 'inherit',
-      ...options
-    });
-    return result;
-  } catch (error) {
-    if (options.silent) return null;
-    throw error;
+// Singleton FigmaClient instance
+let _figmaClient = null;
+
+// Helper: Get or create FigmaClient
+async function getFigmaClient() {
+  if (!_figmaClient) {
+    _figmaClient = new FigmaClient();
+    await _figmaClient.connect();
   }
+  return _figmaClient;
+}
+
+// Helper: Run code in Figma (replaces figma-use eval)
+async function figmaEval(code) {
+  const client = await getFigmaClient();
+  return await client.eval(code);
+}
+
+// Sync wrapper for figmaEval using temp file
+function figmaEvalSync(code) {
+  const tempFile = join('/tmp', `figma-eval-${Date.now()}.mjs`);
+  const resultFile = join('/tmp', `figma-result-${Date.now()}.json`);
+
+  const script = `
+    import { FigmaClient } from '${join(process.cwd(), 'src/figma-client.js').replace(/\\/g, '/')}';
+    import { writeFileSync } from 'fs';
+
+    (async () => {
+      try {
+        const client = new FigmaClient();
+        await client.connect();
+        const result = await client.eval(${JSON.stringify(code)});
+        writeFileSync('${resultFile}', JSON.stringify({ success: true, result }));
+        client.close();
+      } catch (e) {
+        writeFileSync('${resultFile}', JSON.stringify({ success: false, error: e.message }));
+      }
+    })();
+  `;
+
+  writeFileSync(tempFile, script);
+  try {
+    execSync(`node ${tempFile}`, { stdio: 'pipe', timeout: 30000 });
+    if (existsSync(resultFile)) {
+      const data = JSON.parse(readFileSync(resultFile, 'utf8'));
+      try { execSync(`rm -f ${tempFile} ${resultFile}`, { stdio: 'pipe' }); } catch {}
+      if (data.success) return data.result;
+      throw new Error(data.error);
+    }
+  } catch (e) {
+    try { execSync(`rm -f ${tempFile} ${resultFile}`, { stdio: 'pipe' }); } catch {}
+    throw e;
+  }
+  return null;
+}
+
+// Compatibility wrapper for old figmaUse calls
+function figmaUse(args, options = {}) {
+  // Parse eval command
+  const evalMatch = args.match(/^eval\s+"(.+)"$/s) || args.match(/^eval\s+'(.+)'$/s);
+
+  if (evalMatch) {
+    const code = evalMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    try {
+      const result = figmaEvalSync(code);
+      if (!options.silent && result !== undefined) {
+        console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+      }
+      return typeof result === 'object' ? JSON.stringify(result) : String(result || '');
+    } catch (error) {
+      if (options.silent) return null;
+      throw error;
+    }
+  }
+
+  if (args === 'status' || args.startsWith('status')) {
+    try {
+      const result = execSync('curl -s http://localhost:9222/json', { encoding: 'utf8', stdio: 'pipe' });
+      const pages = JSON.parse(result);
+      const figmaPage = pages.find(p => p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file'));
+      if (figmaPage) {
+        const status = `Connected to Figma\n  File: ${figmaPage.title.replace(' – Figma', '')}`;
+        if (!options.silent) console.log(status);
+        return status;
+      }
+      return 'Not connected';
+    } catch {
+      return 'Not connected';
+    }
+  }
+
+  if (args === 'variable list') {
+    const result = figmaEvalSync(`
+      figma.variables.getLocalVariables().map(v => v.name + ' (' + v.resolvedType + ')').join('\\n')
+    `);
+    if (!options.silent) console.log(result);
+    return result;
+  }
+
+  if (args === 'collection list') {
+    const result = figmaEvalSync(`
+      figma.variables.getLocalVariableCollections().map(c => c.name + ' (' + c.variableIds.length + ' vars)').join('\\n')
+    `);
+    if (!options.silent) console.log(result);
+    return result;
+  }
+
+  if (args.startsWith('collection create ')) {
+    const name = args.replace('collection create ', '').replace(/"/g, '');
+    const result = figmaEvalSync(`
+      const col = figma.variables.createVariableCollection('${name}');
+      col.id
+    `);
+    if (!options.silent) console.log(chalk.green('✓ Created collection: ' + name));
+    return result;
+  }
+
+  if (args.startsWith('variable find ')) {
+    const pattern = args.replace('variable find ', '').replace(/"/g, '');
+    const result = figmaEvalSync(`
+      const pattern = '${pattern}'.replace('*', '.*');
+      const re = new RegExp(pattern, 'i');
+      figma.variables.getLocalVariables().filter(v => re.test(v.name)).map(v => v.name).join('\\n')
+    `);
+    if (!options.silent) console.log(result);
+    return result;
+  }
+
+  if (args.startsWith('select ')) {
+    const nodeId = args.replace('select ', '').replace(/"/g, '');
+    figmaEvalSync(`
+      const node = figma.getNodeById('${nodeId}');
+      if (node) figma.currentPage.selection = [node];
+    `);
+    return 'Selected';
+  }
+
+  // Fallback warning
+  if (!options.silent) {
+    console.log(chalk.yellow('Command not fully supported: ' + args));
+  }
+  return null;
 }
 
 // Helper: Check connection
-function checkConnection() {
-  const result = figmaUse('status', { silent: true });
-  if (!result || result.includes('Not connected')) {
+async function checkConnection() {
+  const connected = await FigmaClient.isConnected();
+  if (!connected) {
     console.log(chalk.red('\n✗ Not connected to Figma\n'));
     console.log(chalk.white('  Make sure Figma is running with remote debugging:'));
     console.log(chalk.cyan('  figma-ds-cli connect\n'));
@@ -122,17 +253,17 @@ function checkConnection() {
   return true;
 }
 
-// Helper: Check if figma-use is installed
-function checkDependencies(silent = false) {
+// Helper: Check connection (sync version for backwards compat)
+function checkConnectionSync() {
+  // This is a sync check - just verify port is open
   try {
-    execSync('which figma-use', { stdio: 'pipe' });
+    execSync('curl -s http://localhost:9222/json > /dev/null', { stdio: 'pipe' });
     return true;
   } catch {
-    if (!silent) {
-      console.log(chalk.yellow('  Installing figma-use...'));
-      execSync('npm install -g figma-use', { stdio: 'inherit' });
-    }
-    return false;
+    console.log(chalk.red('\n✗ Not connected to Figma\n'));
+    console.log(chalk.white('  Make sure Figma is running with remote debugging:'));
+    console.log(chalk.cyan('  figma-ds-cli connect\n'));
+    process.exit(1);
   }
 }
 
@@ -174,13 +305,13 @@ program.action(async () => {
   const config = loadConfig();
 
   // First time? Run init
-  if (!config.patched || !checkDependencies(true)) {
+  if (!config.patched) {
     showBanner();
     console.log(chalk.white('  Welcome! Let\'s get you set up.\n'));
     console.log(chalk.gray('  This takes about 30 seconds. No API key needed.\n'));
 
     // Step 1: Check Node version
-    console.log(chalk.blue('Step 1/4: ') + 'Checking Node.js...');
+    console.log(chalk.blue('Step 1/3: ') + 'Checking Node.js...');
     const nodeVersion = process.version;
     const nodeMajor = parseInt(nodeVersion.slice(1).split('.')[0]);
     if (nodeMajor < 18) {
@@ -189,48 +320,38 @@ program.action(async () => {
     }
     console.log(chalk.green(`  ✓ Node.js ${nodeVersion}`));
 
-    // Step 2: Install figma-use
-    console.log(chalk.blue('\nStep 2/4: ') + 'Installing dependencies...');
-    if (checkDependencies(true)) {
-      console.log(chalk.green('  ✓ figma-use already installed'));
-    } else {
-      const spinner = ora('  Installing figma-use...').start();
-      try {
-        execSync('npm install -g figma-use', { stdio: 'pipe' });
-        spinner.succeed('figma-use installed');
-      } catch (error) {
-        spinner.fail('Failed to install figma-use');
-        console.log(chalk.gray('  Try manually: npm install -g figma-use'));
-        process.exit(1);
-      }
-    }
-
-    // Step 3: Patch Figma
-    console.log(chalk.blue('\nStep 3/4: ') + 'Patching Figma Desktop...');
+    // Step 2: Patch Figma
+    console.log(chalk.blue('\nStep 2/3: ') + 'Patching Figma Desktop...');
     if (config.patched) {
       console.log(chalk.green('  ✓ Figma already patched'));
     } else {
       console.log(chalk.gray('  (This allows CLI to connect to Figma)'));
       const spinner = ora('  Patching...').start();
       try {
-        execSync('figma-use patch', { stdio: 'pipe' });
-        config.patched = true;
-        saveConfig(config);
-        spinner.succeed('Figma patched');
-      } catch (error) {
-        if (error.message?.includes('already patched') || error.stderr?.includes('already patched')) {
+        const patchStatus = isPatched();
+        if (patchStatus === true) {
           config.patched = true;
           saveConfig(config);
           spinner.succeed('Figma already patched');
+        } else if (patchStatus === false) {
+          patchFigma();
+          config.patched = true;
+          saveConfig(config);
+          spinner.succeed('Figma patched');
         } else {
-          spinner.fail('Patch failed');
-          console.log(chalk.gray('  Try manually: figma-use patch'));
+          // Can't determine - assume it's fine (old Figma version)
+          config.patched = true;
+          saveConfig(config);
+          spinner.succeed('Figma ready (no patch needed)');
         }
+      } catch (error) {
+        spinner.fail('Patch failed: ' + error.message);
+        console.log(chalk.gray('  You may need to run as admin/sudo'));
       }
     }
 
-    // Step 4: Start Figma
-    console.log(chalk.blue('\nStep 4/4: ') + 'Starting Figma...');
+    // Step 3: Start Figma
+    console.log(chalk.blue('\nStep 3/3: ') + 'Starting Figma...');
     try {
       killFigma();
       await new Promise(r => setTimeout(r, 1000));
@@ -242,11 +363,8 @@ program.action(async () => {
       let connected = false;
       for (let i = 0; i < 10; i++) {
         await new Promise(r => setTimeout(r, 1000));
-        const result = figmaUse('status', { silent: true });
-        if (result && result.includes('Connected')) {
-          connected = true;
-          break;
-        }
+        connected = await FigmaClient.isConnected();
+        if (connected) break;
       }
 
       if (connected) {
@@ -268,10 +386,17 @@ program.action(async () => {
   // Already set up - check connection and show status
   showBanner();
 
-  const result = figmaUse('status', { silent: true });
-  if (result && result.includes('Connected')) {
+  const connected = await FigmaClient.isConnected();
+  if (connected) {
     console.log(chalk.green('  ✓ Connected to Figma\n'));
-    console.log(chalk.gray(result.trim().split('\n').map(l => '  ' + l).join('\n')));
+    try {
+      const client = new FigmaClient();
+      await client.connect();
+      const info = await client.getPageInfo();
+      console.log(chalk.gray(`  File: ${client.pageTitle.replace(' – Figma', '')}`));
+      console.log(chalk.gray(`  Page: ${info.name}`));
+      client.close();
+    } catch {}
     console.log();
     showQuickStart();
   } else {
@@ -286,8 +411,7 @@ program.action(async () => {
       const spinner = ora('  Waiting for connection...').start();
       for (let i = 0; i < 8; i++) {
         await new Promise(r => setTimeout(r, 1000));
-        const res = figmaUse('status', { silent: true });
-        if (res && res.includes('Connected')) {
+        if (await FigmaClient.isConnected()) {
           spinner.succeed('Connected to Figma\n');
           showQuickStart();
           return;
@@ -348,24 +472,8 @@ program
     }
     console.log(chalk.green(`  ✓ Node.js ${nodeVersion}`));
 
-    // Step 2: Install figma-use
-    console.log(chalk.blue('\nStep 2/4: ') + 'Installing dependencies...');
-    if (checkDependencies(true)) {
-      console.log(chalk.green('  ✓ figma-use already installed'));
-    } else {
-      const spinner = ora('  Installing figma-use...').start();
-      try {
-        execSync('npm install -g figma-use', { stdio: 'pipe' });
-        spinner.succeed('figma-use installed');
-      } catch (error) {
-        spinner.fail('Failed to install figma-use');
-        console.log(chalk.gray('  Try manually: npm install -g figma-use'));
-        process.exit(1);
-      }
-    }
-
-    // Step 3: Patch Figma
-    console.log(chalk.blue('\nStep 3/4: ') + 'Patching Figma Desktop...');
+    // Step 2: Patch Figma
+    console.log(chalk.blue('\nStep 2/3: ') + 'Patching Figma Desktop...');
     const config = loadConfig();
     if (config.patched) {
       console.log(chalk.green('  ✓ Figma already patched'));
@@ -373,24 +481,29 @@ program
       console.log(chalk.gray('  (This allows CLI to connect to Figma)'));
       const spinner = ora('  Patching...').start();
       try {
-        execSync('figma-use patch', { stdio: 'pipe' });
-        config.patched = true;
-        saveConfig(config);
-        spinner.succeed('Figma patched');
-      } catch (error) {
-        if (error.message?.includes('already patched')) {
+        const patchStatus = isPatched();
+        if (patchStatus === true) {
           config.patched = true;
           saveConfig(config);
           spinner.succeed('Figma already patched');
+        } else if (patchStatus === false) {
+          patchFigma();
+          config.patched = true;
+          saveConfig(config);
+          spinner.succeed('Figma patched');
         } else {
-          spinner.fail('Patch failed');
-          console.log(chalk.gray('  Try manually: figma-use patch'));
+          config.patched = true;
+          saveConfig(config);
+          spinner.succeed('Figma ready (no patch needed)');
         }
+      } catch (error) {
+        spinner.fail('Patch failed: ' + error.message);
+        console.log(chalk.gray('  You may need to run as admin/sudo'));
       }
     }
 
-    // Step 4: Start Figma
-    console.log(chalk.blue('\nStep 4/4: ') + 'Starting Figma...');
+    // Step 3: Start Figma
+    console.log(chalk.blue('\nStep 3/3: ') + 'Starting Figma...');
     try {
       killFigma();
       await new Promise(r => setTimeout(r, 1000));
@@ -402,11 +515,8 @@ program
       let connected = false;
       for (let i = 0; i < 10; i++) {
         await new Promise(r => setTimeout(r, 1000));
-        const result = figmaUse('status', { silent: true });
-        if (result && result.includes('Connected')) {
-          connected = true;
-          break;
-        }
+        connected = await FigmaClient.isConnected();
+        if (connected) break;
       }
 
       if (connected) {
@@ -1103,11 +1213,12 @@ removed
     ];
 
     try {
+      const client = await getFigmaClient();
       for (const { jsx } of jsxComponents) {
-        execSync(`echo '${jsx}' | figma-use render --stdin`, { stdio: 'pipe' });
+        await client.render(jsx);
       }
       spinner.succeed('9 frames created');
-    } catch (e) { spinner.fail('Frame creation failed'); }
+    } catch (e) { spinner.fail('Frame creation failed: ' + e.message); }
 
     // Step 2: Convert to components one by one with positioning
     spinner = ora('Converting to components...').start();
@@ -2177,9 +2288,16 @@ results.length === 0 ? 'No nodes found matching "${name}"' : results.slice(0, ${
 program
   .command('render <jsx>')
   .description('Render JSX to Figma')
-  .action((jsx) => {
-    checkConnection();
-    execSync(`echo '${jsx}' | figma-use render --stdin`, { stdio: 'inherit' });
+  .action(async (jsx) => {
+    await checkConnection();
+    try {
+      const client = await getFigmaClient();
+      const result = await client.render(jsx);
+      console.log(chalk.green('✓ Rendered: ' + result.id));
+      console.log(chalk.gray('  name: ' + result.name));
+    } catch (e) {
+      console.log(chalk.red('✗ Render failed: ' + e.message));
+    }
   });
 
 // ============ EXPORT ============

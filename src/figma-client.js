@@ -344,6 +344,248 @@ export class FigmaClient {
     return `{r:${parseInt(hex.slice(1,3),16)/255},g:${parseInt(hex.slice(3,5),16)/255},b:${parseInt(hex.slice(5,7),16)/255}}`;
   }
 
+  // ============ Node Operations ============
+
+  /**
+   * Get a node by ID
+   */
+  async getNode(nodeId) {
+    return await this.eval(`
+      (function() {
+        const n = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!n) return null;
+        return {
+          id: n.id,
+          type: n.type,
+          name: n.name || '',
+          x: n.x,
+          y: n.y,
+          width: n.width,
+          height: n.height,
+          visible: n.visible,
+          opacity: n.opacity
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Delete a node by ID
+   */
+  async deleteNode(nodeId) {
+    return await this.eval(`
+      (function() {
+        const n = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!n) return { success: false, error: 'Node not found' };
+        n.remove();
+        return { success: true };
+      })()
+    `);
+  }
+
+  /**
+   * Move a node to new position
+   */
+  async moveNode(nodeId, x, y) {
+    return await this.eval(`
+      (function() {
+        const n = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!n) return { success: false, error: 'Node not found' };
+        n.x = ${x};
+        n.y = ${y};
+        return { success: true, x: n.x, y: n.y };
+      })()
+    `);
+  }
+
+  /**
+   * Resize a node
+   */
+  async resizeNode(nodeId, width, height) {
+    return await this.eval(`
+      (function() {
+        const n = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!n) return { success: false, error: 'Node not found' };
+        if (n.resize) n.resize(${width}, ${height});
+        return { success: true, width: n.width, height: n.height };
+      })()
+    `);
+  }
+
+  /**
+   * Get current selection
+   */
+  async getSelection() {
+    return await this.eval(`
+      figma.currentPage.selection.map(n => ({
+        id: n.id,
+        type: n.type,
+        name: n.name || ''
+      }))
+    `);
+  }
+
+  /**
+   * Set selection by node IDs
+   */
+  async setSelection(nodeIds) {
+    const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+    return await this.eval(`
+      (function() {
+        const nodes = ${JSON.stringify(ids)}.map(id => figma.getNodeById(id)).filter(n => n);
+        figma.currentPage.selection = nodes;
+        return nodes.map(n => n.id);
+      })()
+    `);
+  }
+
+  /**
+   * Get node tree (recursive structure)
+   */
+  async getNodeTree(nodeId, maxDepth = 10) {
+    return await this.eval(`
+      (function() {
+        function buildTree(node, depth) {
+          if (depth > ${maxDepth}) return null;
+          const result = {
+            id: node.id,
+            type: node.type,
+            name: node.name || '',
+            x: Math.round(node.x || 0),
+            y: Math.round(node.y || 0),
+            width: Math.round(node.width || 0),
+            height: Math.round(node.height || 0)
+          };
+          if (node.children) {
+            result.children = node.children.map(c => buildTree(c, depth + 1)).filter(c => c);
+          }
+          return result;
+        }
+        const node = ${nodeId ? `figma.getNodeById(${JSON.stringify(nodeId)})` : 'figma.currentPage'};
+        if (!node) return null;
+        return buildTree(node, 0);
+      })()
+    `);
+  }
+
+  /**
+   * Convert nodes to components
+   */
+  async toComponent(nodeIds) {
+    const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+    return await this.eval(`
+      (function() {
+        const results = [];
+        ${JSON.stringify(ids)}.forEach(id => {
+          const node = figma.getNodeById(id);
+          if (node && node.type === 'FRAME') {
+            const component = figma.createComponentFromNode(node);
+            results.push({ id: component.id, name: component.name });
+          }
+        });
+        return results;
+      })()
+    `);
+  }
+
+  /**
+   * Duplicate a node
+   */
+  async duplicateNode(nodeId, offsetX = 50, offsetY = 0) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return null;
+        const clone = node.clone();
+        clone.x = node.x + ${offsetX};
+        clone.y = node.y + ${offsetY};
+        return { id: clone.id, name: clone.name, x: clone.x, y: clone.y };
+      })()
+    `);
+  }
+
+  /**
+   * Rename a node
+   */
+  async renameNode(nodeId, newName) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { success: false, error: 'Node not found' };
+        node.name = ${JSON.stringify(newName)};
+        return { success: true, name: node.name };
+      })()
+    `);
+  }
+
+  /**
+   * Set node fill color
+   */
+  async setFill(nodeId, hexColor) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { success: false, error: 'Node not found' };
+        const rgb = ${this.hexToRgbCode(hexColor)};
+        node.fills = [{type: 'SOLID', color: rgb}];
+        return { success: true };
+      })()
+    `);
+  }
+
+  /**
+   * Set node corner radius
+   */
+  async setRadius(nodeId, radius) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { success: false, error: 'Node not found' };
+        if ('cornerRadius' in node) node.cornerRadius = ${radius};
+        return { success: true };
+      })()
+    `);
+  }
+
+  /**
+   * Get file key from current file
+   */
+  async getFileKey() {
+    return await this.eval('figma.fileKey');
+  }
+
+  /**
+   * Arrange nodes on canvas
+   */
+  async arrangeNodes(gap = 100, columns = null) {
+    return await this.eval(`
+      (function() {
+        const nodes = figma.currentPage.children.filter(n => n.type === 'FRAME' || n.type === 'COMPONENT');
+        if (nodes.length === 0) return { arranged: 0 };
+
+        const cols = ${columns || 'null'} || nodes.length;
+        let x = 0, y = 0, rowHeight = 0, col = 0;
+
+        nodes.forEach(n => {
+          n.x = x;
+          n.y = y;
+          rowHeight = Math.max(rowHeight, n.height);
+          col++;
+          if (col >= cols) {
+            col = 0;
+            x = 0;
+            y += rowHeight + ${gap};
+            rowHeight = 0;
+          } else {
+            x += n.width + ${gap};
+          }
+        });
+
+        return { arranged: nodes.length };
+      })()
+    `);
+  }
+
   close() {
     if (this.ws) {
       this.ws.close();

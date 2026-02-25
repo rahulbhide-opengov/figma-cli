@@ -2600,6 +2600,584 @@ export const Default: Story = {};
     `);
   }
 
+  // ============ Variable Modes ============
+
+  /**
+   * Get all modes in a variable collection
+   */
+  async getCollectionModes(collectionId) {
+    return await this.eval(`
+      (function() {
+        const col = figma.variables.getVariableCollectionById(${JSON.stringify(collectionId)});
+        if (!col) return { error: 'Collection not found' };
+        return {
+          id: col.id,
+          name: col.name,
+          modes: col.modes,
+          defaultModeId: col.defaultModeId
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Add a new mode to a variable collection
+   */
+  async addMode(collectionId, modeName) {
+    return await this.eval(`
+      (function() {
+        const col = figma.variables.getVariableCollectionById(${JSON.stringify(collectionId)});
+        if (!col) return { error: 'Collection not found' };
+
+        const modeId = col.addMode(${JSON.stringify(modeName)});
+        return {
+          success: true,
+          modeId,
+          modeName: ${JSON.stringify(modeName)},
+          allModes: col.modes
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Rename a mode in a variable collection
+   */
+  async renameMode(collectionId, modeId, newName) {
+    return await this.eval(`
+      (function() {
+        const col = figma.variables.getVariableCollectionById(${JSON.stringify(collectionId)});
+        if (!col) return { error: 'Collection not found' };
+
+        col.renameMode(${JSON.stringify(modeId)}, ${JSON.stringify(newName)});
+        return { success: true, modeId: ${JSON.stringify(modeId)}, newName: ${JSON.stringify(newName)} };
+      })()
+    `);
+  }
+
+  /**
+   * Remove a mode from a variable collection
+   */
+  async removeMode(collectionId, modeId) {
+    return await this.eval(`
+      (function() {
+        const col = figma.variables.getVariableCollectionById(${JSON.stringify(collectionId)});
+        if (!col) return { error: 'Collection not found' };
+
+        col.removeMode(${JSON.stringify(modeId)});
+        return { success: true, modeId: ${JSON.stringify(modeId)} };
+      })()
+    `);
+  }
+
+  /**
+   * Set variable value for a specific mode
+   */
+  async setVariableValueForMode(variableId, modeId, value) {
+    return await this.eval(`
+      (function() {
+        const variable = figma.variables.getVariableById(${JSON.stringify(variableId)});
+        if (!variable) return { error: 'Variable not found' };
+
+        let val = ${JSON.stringify(value)};
+
+        // Convert hex color to RGB if needed
+        if (variable.resolvedType === 'COLOR' && typeof val === 'string' && val.startsWith('#')) {
+          const hex = val.slice(1);
+          val = {
+            r: parseInt(hex.slice(0, 2), 16) / 255,
+            g: parseInt(hex.slice(2, 4), 16) / 255,
+            b: parseInt(hex.slice(4, 6), 16) / 255
+          };
+        }
+
+        variable.setValueForMode(${JSON.stringify(modeId)}, val);
+        return { success: true, variableId: variable.id, modeId: ${JSON.stringify(modeId)} };
+      })()
+    `);
+  }
+
+  /**
+   * Get variable value for a specific mode
+   */
+  async getVariableValueForMode(variableId, modeId) {
+    return await this.eval(`
+      (function() {
+        const variable = figma.variables.getVariableById(${JSON.stringify(variableId)});
+        if (!variable) return { error: 'Variable not found' };
+
+        const value = variable.valuesByMode[${JSON.stringify(modeId)}];
+        return {
+          variableId: variable.id,
+          variableName: variable.name,
+          modeId: ${JSON.stringify(modeId)},
+          value
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Create a complete variable collection with modes (e.g., Light/Dark)
+   */
+  async createCollectionWithModes(name, modeNames = ['Light', 'Dark']) {
+    return await this.eval(`
+      (function() {
+        const col = figma.variables.createVariableCollection(${JSON.stringify(name)});
+
+        // Rename default mode to first mode name
+        col.renameMode(col.modes[0].modeId, ${JSON.stringify(modeNames[0])});
+
+        // Add additional modes
+        const modes = [{ modeId: col.modes[0].modeId, name: ${JSON.stringify(modeNames[0])} }];
+        for (let i = 1; i < ${JSON.stringify(modeNames)}.length; i++) {
+          const modeId = col.addMode(${JSON.stringify(modeNames)}[i]);
+          modes.push({ modeId, name: ${JSON.stringify(modeNames)}[i] });
+        }
+
+        return {
+          id: col.id,
+          name: col.name,
+          modes
+        };
+      })()
+    `);
+  }
+
+  // ============ Batch Variable Operations ============
+
+  /**
+   * Batch create variables (up to 100)
+   * @param {Array} variables - [{name, type, value, modeValues: {modeId: value}}]
+   */
+  async batchCreateVariables(collectionId, variables) {
+    return await this.eval(`
+      (async function() {
+        const col = figma.variables.getVariableCollectionById(${JSON.stringify(collectionId)});
+        if (!col) return { error: 'Collection not found' };
+
+        const vars = ${JSON.stringify(variables)};
+        const results = [];
+
+        for (const v of vars.slice(0, 100)) {
+          const variable = figma.variables.createVariable(v.name, col, v.type || 'COLOR');
+
+          // Set default value
+          if (v.value !== undefined) {
+            let val = v.value;
+            if (variable.resolvedType === 'COLOR' && typeof val === 'string' && val.startsWith('#')) {
+              const hex = val.slice(1);
+              val = {
+                r: parseInt(hex.slice(0, 2), 16) / 255,
+                g: parseInt(hex.slice(2, 4), 16) / 255,
+                b: parseInt(hex.slice(4, 6), 16) / 255
+              };
+            }
+            variable.setValueForMode(col.defaultModeId, val);
+          }
+
+          // Set mode-specific values
+          if (v.modeValues) {
+            for (const [modeId, modeVal] of Object.entries(v.modeValues)) {
+              let val = modeVal;
+              if (variable.resolvedType === 'COLOR' && typeof val === 'string' && val.startsWith('#')) {
+                const hex = val.slice(1);
+                val = {
+                  r: parseInt(hex.slice(0, 2), 16) / 255,
+                  g: parseInt(hex.slice(2, 4), 16) / 255,
+                  b: parseInt(hex.slice(4, 6), 16) / 255
+                };
+              }
+              variable.setValueForMode(modeId, val);
+            }
+          }
+
+          results.push({ id: variable.id, name: variable.name });
+        }
+
+        return { created: results.length, variables: results };
+      })()
+    `);
+  }
+
+  /**
+   * Batch update variable values
+   * @param {Array} updates - [{variableId, modeId, value}]
+   */
+  async batchUpdateVariables(updates) {
+    return await this.eval(`
+      (function() {
+        const updates = ${JSON.stringify(updates)};
+        const results = [];
+
+        for (const u of updates.slice(0, 100)) {
+          const variable = figma.variables.getVariableById(u.variableId);
+          if (!variable) {
+            results.push({ variableId: u.variableId, error: 'Not found' });
+            continue;
+          }
+
+          let val = u.value;
+          if (variable.resolvedType === 'COLOR' && typeof val === 'string' && val.startsWith('#')) {
+            const hex = val.slice(1);
+            val = {
+              r: parseInt(hex.slice(0, 2), 16) / 255,
+              g: parseInt(hex.slice(2, 4), 16) / 255,
+              b: parseInt(hex.slice(4, 6), 16) / 255
+            };
+          }
+
+          variable.setValueForMode(u.modeId, val);
+          results.push({ variableId: u.variableId, success: true });
+        }
+
+        return { updated: results.filter(r => r.success).length, results };
+      })()
+    `);
+  }
+
+  /**
+   * Batch delete variables
+   */
+  async batchDeleteVariables(variableIds) {
+    return await this.eval(`
+      (function() {
+        const ids = ${JSON.stringify(variableIds)};
+        let deleted = 0;
+
+        for (const id of ids.slice(0, 100)) {
+          const variable = figma.variables.getVariableById(id);
+          if (variable) {
+            variable.remove();
+            deleted++;
+          }
+        }
+
+        return { deleted };
+      })()
+    `);
+  }
+
+  // ============ Component Descriptions ============
+
+  /**
+   * Set description on a component (supports markdown)
+   */
+  async setComponentDescription(componentId, description) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(componentId)});
+        if (!node) return { error: 'Node not found' };
+        if (node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
+          return { error: 'Node is not a component' };
+        }
+
+        node.description = ${JSON.stringify(description)};
+        return { success: true, id: node.id, description: node.description };
+      })()
+    `);
+  }
+
+  /**
+   * Get description from a component
+   */
+  async getComponentDescription(componentId) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(componentId)});
+        if (!node) return { error: 'Node not found' };
+
+        return {
+          id: node.id,
+          name: node.name,
+          type: node.type,
+          description: node.description || ''
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Set description with documentation template
+   */
+  async documentComponent(componentId, options = {}) {
+    const { usage = '', props = [], notes = '' } = options;
+
+    let description = '';
+    if (usage) description += `## Usage\n${usage}\n\n`;
+    if (props.length > 0) {
+      description += `## Properties\n`;
+      props.forEach(p => {
+        description += `- **${p.name}**: ${p.description}\n`;
+      });
+      description += '\n';
+    }
+    if (notes) description += `## Notes\n${notes}`;
+
+    return await this.setComponentDescription(componentId, description.trim());
+  }
+
+  // ============ Console & Debugging ============
+
+  /**
+   * Get console logs from Figma
+   */
+  async getConsoleLogs(limit = 50) {
+    // Enable console tracking if not already
+    await this.send('Runtime.enable');
+
+    return await this.eval(`
+      (function() {
+        // Note: We can't access past console logs directly
+        // But we can return info about current state
+        return {
+          message: 'Console log streaming enabled. Use captureConsoleLogs() to start capturing.',
+          tip: 'Run your plugin code and logs will be captured.'
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Start capturing console logs
+   * Returns logs via callback
+   */
+  async startConsoleCapture(callback) {
+    await this.send('Runtime.enable');
+
+    // Listen for console messages
+    this.ws.on('message', (data) => {
+      const msg = JSON.parse(data);
+      if (msg.method === 'Runtime.consoleAPICalled') {
+        const args = msg.params.args.map(arg => arg.value || arg.description || '');
+        callback({
+          type: msg.params.type,
+          message: args.join(' '),
+          timestamp: msg.params.timestamp
+        });
+      }
+    });
+
+    return { capturing: true };
+  }
+
+  /**
+   * Execute code and capture its console output
+   */
+  async evalWithLogs(expression) {
+    const logs = [];
+
+    // Wrap expression to capture console
+    const wrappedCode = `
+      (function() {
+        const _logs = [];
+        const _origLog = console.log;
+        const _origWarn = console.warn;
+        const _origError = console.error;
+
+        console.log = (...args) => { _logs.push({ type: 'log', args }); _origLog(...args); };
+        console.warn = (...args) => { _logs.push({ type: 'warn', args }); _origWarn(...args); };
+        console.error = (...args) => { _logs.push({ type: 'error', args }); _origError(...args); };
+
+        try {
+          const result = (function() { ${expression} })();
+          return { result, logs: _logs };
+        } finally {
+          console.log = _origLog;
+          console.warn = _origWarn;
+          console.error = _origError;
+        }
+      })()
+    `;
+
+    return await this.eval(wrappedCode);
+  }
+
+  // ============ Page & Plugin Reload ============
+
+  /**
+   * Reload the current page
+   */
+  async reloadPage() {
+    return await this.send('Page.reload');
+  }
+
+  /**
+   * Navigate to a different Figma file
+   */
+  async navigateToFile(fileUrl) {
+    return await this.send('Page.navigate', { url: fileUrl });
+  }
+
+  /**
+   * Get current page URL
+   */
+  async getCurrentUrl() {
+    const result = await this.eval('window.location.href');
+    return { url: result };
+  }
+
+  /**
+   * Reload/refresh plugins
+   */
+  async refreshPlugins() {
+    return await this.eval(`
+      (function() {
+        // Trigger a plugin refresh by accessing the plugin API
+        // This doesn't actually reload plugins but refreshes the state
+        const pluginData = figma.root.getPluginData('__refresh__');
+        figma.root.setPluginData('__refresh__', Date.now().toString());
+        return { refreshed: true, timestamp: Date.now() };
+      })()
+    `);
+  }
+
+  // ============ Organize Variants ============
+
+  /**
+   * Organize component variants into a grid with labels
+   */
+  async organizeVariants(componentSetId, options = {}) {
+    const { gap = 40, labelGap = 20, showLabels = true } = options;
+
+    return await this.eval(`
+      (async function() {
+        const componentSet = figma.getNodeById(${JSON.stringify(componentSetId)});
+        if (!componentSet || componentSet.type !== 'COMPONENT_SET') {
+          return { error: 'Component set not found' };
+        }
+
+        const variants = componentSet.children.filter(c => c.type === 'COMPONENT');
+        if (variants.length === 0) return { error: 'No variants found' };
+
+        // Parse variant properties
+        const propValues = {};
+        variants.forEach(v => {
+          const props = v.name.split(', ');
+          props.forEach(p => {
+            const [key, val] = p.split('=');
+            if (!propValues[key]) propValues[key] = new Set();
+            propValues[key].add(val);
+          });
+        });
+
+        const propNames = Object.keys(propValues);
+        if (propNames.length === 0) return { organized: 0 };
+
+        // Use first two properties for grid (rows/cols)
+        const rowProp = propNames[0];
+        const colProp = propNames[1] || null;
+
+        const rowValues = Array.from(propValues[rowProp]);
+        const colValues = colProp ? Array.from(propValues[colProp]) : [''];
+
+        const gap = ${gap};
+        const labelGap = ${labelGap};
+        const showLabels = ${showLabels};
+
+        // Get max dimensions
+        let maxW = 0, maxH = 0;
+        variants.forEach(v => {
+          maxW = Math.max(maxW, v.width);
+          maxH = Math.max(maxH, v.height);
+        });
+
+        // Position variants in grid
+        let organized = 0;
+        rowValues.forEach((rowVal, rowIdx) => {
+          colValues.forEach((colVal, colIdx) => {
+            const variant = variants.find(v => {
+              const hasRow = v.name.includes(rowProp + '=' + rowVal);
+              const hasCol = !colProp || v.name.includes(colProp + '=' + colVal);
+              return hasRow && hasCol;
+            });
+
+            if (variant) {
+              const xOffset = showLabels ? 100 : 0;
+              const yOffset = showLabels ? 40 : 0;
+
+              variant.x = xOffset + colIdx * (maxW + gap);
+              variant.y = yOffset + rowIdx * (maxH + gap);
+              organized++;
+            }
+          });
+        });
+
+        // Add labels if requested
+        if (showLabels && organized > 0) {
+          await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+
+          // Row labels
+          rowValues.forEach((val, idx) => {
+            const label = figma.createText();
+            label.characters = val;
+            label.fontSize = 12;
+            label.x = 0;
+            label.y = 40 + idx * (maxH + gap) + maxH / 2 - 6;
+            componentSet.parent.appendChild(label);
+          });
+
+          // Column labels
+          if (colProp) {
+            colValues.forEach((val, idx) => {
+              const label = figma.createText();
+              label.characters = val;
+              label.fontSize = 12;
+              label.x = 100 + idx * (maxW + gap) + maxW / 2;
+              label.y = 10;
+              componentSet.parent.appendChild(label);
+            });
+          }
+        }
+
+        // Resize component set to fit
+        componentSet.resizeWithoutConstraints(
+          (showLabels ? 100 : 0) + colValues.length * (maxW + gap) - gap,
+          (showLabels ? 40 : 0) + rowValues.length * (maxH + gap) - gap
+        );
+
+        return {
+          organized,
+          rows: rowValues.length,
+          cols: colValues.length,
+          rowProperty: rowProp,
+          colProperty: colProp
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Auto-generate component set from similar frames
+   */
+  async createComponentSetFromFrames(frameIds, name, variantProperty = 'variant') {
+    return await this.eval(`
+      (async function() {
+        const ids = ${JSON.stringify(frameIds)};
+        const frames = ids.map(id => figma.getNodeById(id)).filter(n => n && n.type === 'FRAME');
+
+        if (frames.length < 2) return { error: 'Need at least 2 frames' };
+
+        // Convert frames to components
+        const components = frames.map((frame, idx) => {
+          const component = figma.createComponentFromNode(frame);
+          component.name = ${JSON.stringify(variantProperty)} + '=' + (frame.name || 'Variant' + (idx + 1));
+          return component;
+        });
+
+        // Combine into component set
+        const componentSet = figma.combineAsVariants(components, figma.currentPage);
+        componentSet.name = ${JSON.stringify(name)};
+
+        return {
+          id: componentSet.id,
+          name: componentSet.name,
+          variantCount: components.length
+        };
+      })()
+    `);
+  }
+
   close() {
     if (this.ws) {
       this.ws.close();

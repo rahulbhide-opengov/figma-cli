@@ -3420,13 +3420,13 @@ return results.length === 0 ? 'No nodes found matching "${name}"' : results.slic
 // Helper: Get next free X position for smart positioning
 function getNextFreeX(gap = 100) {
   try {
-    const result = figmaEvalSync(`
+    const result = figmaEvalSync(`(function() {
       let maxX = 0;
       figma.currentPage.children.forEach(n => {
         maxX = Math.max(maxX, n.x + n.width);
       });
-      maxX
-    `);
+      return maxX;
+    })()`);
     return (result || 0) + gap;
   } catch {
     return 0;

@@ -138,6 +138,66 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 
 ---
 
+## Troubleshooting
+
+### Permission Error When Patching (macOS)
+
+If you see `EPERM: operation not permitted, open '.../app.asar'`:
+
+**1. Make sure Figma is completely closed**
+```bash
+# Check if Figma is still running
+ps aux | grep -i figma
+
+# Force quit if needed
+killall Figma
+```
+
+**2. Try with sudo**
+```bash
+sudo node src/index.js init
+```
+
+**3. If sudo doesn't work, grant Full Disk Access to Terminal**
+
+macOS may block access even with sudo. To fix:
+
+1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+2. Click the **+** button
+3. Add **Terminal** (or iTerm, VS Code, etc.)
+4. Restart Terminal and try again
+
+**4. Manual patch (last resort)**
+
+If nothing works, you can patch manually:
+
+```bash
+# Backup original
+sudo cp /Applications/Figma.app/Contents/Resources/app.asar ~/app.asar.backup
+
+# The patch changes one string in the file
+# From: removeSwitch("remote-debugging-port")
+# To:   removeSwitch("remote-debugXing-port")
+
+# Use a hex editor or this command:
+sudo sed -i '' 's/remote-debugging-port/remote-debugXing-port/g' /Applications/Figma.app/Contents/Resources/app.asar
+
+# Re-sign the app
+sudo codesign --force --deep --sign - /Applications/Figma.app
+```
+
+### Windows Permission Error
+
+Run Command Prompt or PowerShell as Administrator, then run `node src/index.js init`.
+
+### Figma Not Connecting
+
+1. Make sure Figma Desktop is running (not the web version)
+2. Check if port 9222 is available: `lsof -i :9222`
+3. Restart Figma: `node src/index.js connect`
+
+---
+
 ## Full Feature List
 
 ### Design Tokens & Variables

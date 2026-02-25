@@ -434,7 +434,14 @@ program.action(async () => {
         }
       } catch (error) {
         spinner.fail('Patch failed: ' + error.message);
-        console.log(chalk.gray('  You may need to run as admin/sudo'));
+        if (error.message.includes('EPERM') || error.message.includes('permission')) {
+          console.log(chalk.yellow('\n  Troubleshooting:'));
+          console.log(chalk.gray('  1. Make sure Figma is completely closed (check Activity Monitor)'));
+          console.log(chalk.gray('  2. On macOS, try: sudo node src/index.js init'));
+          console.log(chalk.gray('  3. If still failing, grant Terminal "Full Disk Access":'));
+          console.log(chalk.gray('     System Settings → Privacy & Security → Full Disk Access → Add Terminal'));
+          console.log(chalk.gray('  4. Or manually patch: See README.md troubleshooting section\n'));
+        }
       }
     }
 
@@ -586,7 +593,14 @@ program
         }
       } catch (error) {
         spinner.fail('Patch failed: ' + error.message);
-        console.log(chalk.gray('  You may need to run as admin/sudo'));
+        if (error.message.includes('EPERM') || error.message.includes('permission')) {
+          console.log(chalk.yellow('\n  Troubleshooting:'));
+          console.log(chalk.gray('  1. Make sure Figma is completely closed (check Activity Monitor)'));
+          console.log(chalk.gray('  2. On macOS, try: sudo node src/index.js init'));
+          console.log(chalk.gray('  3. If still failing, grant Terminal "Full Disk Access":'));
+          console.log(chalk.gray('     System Settings → Privacy & Security → Full Disk Access → Add Terminal'));
+          console.log(chalk.gray('  4. Or manually patch: See README.md troubleshooting section\n'));
+        }
       }
     }
 

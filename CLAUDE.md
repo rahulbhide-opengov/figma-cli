@@ -2,6 +2,19 @@
 
 CLI that controls Figma Desktop directly. No API key needed.
 
+## IMPORTANT: Website Recreation Workflow
+
+When user asks to "recreate", "rebuild", "copy", or "clone" a website:
+
+1. **FIRST** take a screenshot and import as reference:
+```bash
+node src/index.js screenshot-url "https://example.com/page"
+```
+
+2. **THEN** build the design in Figma using the screenshot as visual reference
+
+This ensures pixel-accurate recreation. Do NOT guess or use WebFetch - always screenshot first.
+
 ## After Setup: Show Designer-Friendly Examples
 
 When setup is complete, show these natural language examples (NOT CLI commands):

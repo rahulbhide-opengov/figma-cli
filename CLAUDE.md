@@ -9,6 +9,31 @@ Figma must be running. Then:
 node src/index.js connect
 ```
 
+## Speed Tips (figma-use)
+
+Start the daemon for faster command execution:
+```bash
+npx figma-use daemon start
+```
+
+Direct figma-use commands (faster than wrapping):
+```bash
+# Arrange elements on canvas
+npx figma-use arrange --mode column --gap 20
+
+# Inspect node structure
+npx figma-use node tree "2:123"
+
+# Delete nodes
+npx figma-use node delete "2:123"
+
+# Select nodes
+npx figma-use selection set "2:123 2:124"
+
+# Convert frames to components
+npx figma-use node to-component "2:123"
+```
+
 ## What Users Might Ask → Commands
 
 ### Canvas Awareness (Smart Positioning)
@@ -440,7 +465,13 @@ node src/index.js fj eval "
 
 4. **Library variables** cannot be accessed via `getLocalVariableCollections()`. Find them through `boundVariables` on nodes.
 
-5. **FigJam eval needs IIFE** for async or to avoid variable conflicts:
+5. **Avoid stray elements**: Always use `render` command for frames with text. Using `eval` with async functions can create elements outside their parent frames. Clean up with:
+   ```bash
+   npx figma-use arrange --mode column --gap 20  # See what's on page
+   npx figma-use node delete "2:123"             # Delete stray nodes
+   ```
+
+6. **FigJam eval needs IIFE** for async or to avoid variable conflicts:
    ```javascript
    (async function() { ... })()
    ```

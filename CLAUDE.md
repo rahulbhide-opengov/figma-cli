@@ -588,6 +588,15 @@ node src/index.js raw export "1:234" --scale 2
 node src/index.js eval "figma.currentPage.name"
 ```
 
+"Run JavaScript from file" (RECOMMENDED for complex scripts)
+```bash
+# Write script to temp file, then run
+node src/index.js run /tmp/my-script.js
+
+# Or use --file option
+node src/index.js eval --file /tmp/my-script.js
+```
+
 ### Export
 
 "Export variables as CSS"

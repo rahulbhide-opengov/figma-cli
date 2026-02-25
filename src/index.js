@@ -3580,10 +3580,41 @@ JSON.stringify({ theme: { extend: { colors } } }, null, 2)
 // ============ EVAL ============
 
 program
-  .command('eval <code>')
+  .command('eval [code]')
   .description('Execute JavaScript in Figma plugin context')
-  .action((code) => {
+  .option('-f, --file <path>', 'Run code from file instead of argument')
+  .action((code, options) => {
     checkConnection();
+    let jsCode = code;
+
+    // If --file option provided, read code from file
+    if (options.file) {
+      if (!existsSync(options.file)) {
+        console.log(chalk.red('✗ File not found: ' + options.file));
+        return;
+      }
+      jsCode = readFileSync(options.file, 'utf8');
+    }
+
+    if (!jsCode) {
+      console.log(chalk.red('✗ No code provided. Use: eval "code" or eval --file /path/to/script.js'));
+      return;
+    }
+
+    figmaUse(`eval "${jsCode.replace(/"/g, '\\"')}"`);
+  });
+
+// Run command - alias for eval --file
+program
+  .command('run <file>')
+  .description('Run JavaScript file in Figma (alias for eval --file)')
+  .action((file) => {
+    checkConnection();
+    if (!existsSync(file)) {
+      console.log(chalk.red('✗ File not found: ' + file));
+      return;
+    }
+    const code = readFileSync(file, 'utf8');
     figmaUse(`eval "${code.replace(/"/g, '\\"')}"`);
   });
 

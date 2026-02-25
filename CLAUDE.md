@@ -747,6 +747,20 @@ node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={
 # Frame with auto-layout
 <Frame name="Name" w={320} h={180} bg="#color" rounded={16} flex="col" gap={8} p={24}>
 
+# Frame that hugs content (auto-size)
+<Frame name="Auto" hug="both" flex="row" gap={8}>
+<Frame name="Auto Width" hug="w" h={200}>
+<Frame name="Auto Height" hug="h" w={300}>
+
+# Frame with clipping disabled (DEFAULT - content can overflow)
+<Frame clip={false} ...>
+
+# Frame with clipping enabled (content is cut off at edges)
+<Frame clip={true} ...>
+
+# Nested frame that fills parent width
+<Frame w="fill" ...>
+
 # Text with fill width (prevents overflow)
 <Text size={14} color="#color" w="fill">Content</Text>
 
@@ -759,6 +773,28 @@ node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={
 
 # Position on canvas
 <Frame x={1000} y={0} ...>
+```
+
+### Auto-Layout Best Practices
+
+**IMPORTANT:** To avoid clipped/cut-off content:
+
+1. **Use `hug="both"`** for containers that should grow with content
+2. **Use `w="fill"`** for nested frames/text that should fill parent width
+3. **Don't set fixed w/h** unless you specifically want fixed size
+4. **clip defaults to false** - content won't be cut off
+
+```bash
+# GOOD: Gallery that grows with cards
+<Frame name="Gallery" hug="both" flex="row" gap={24} p={40}>
+  <Instance name="Card 1" />
+  <Instance name="Card 2" />
+</Frame>
+
+# BAD: Fixed size gallery (cards may be clipped)
+<Frame name="Gallery" w={800} h={400} flex="row" gap={24}>
+  ...
+</Frame>
 ```
 
 ### Using Component Instances

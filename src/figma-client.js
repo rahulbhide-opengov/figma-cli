@@ -420,6 +420,12 @@ export class FigmaClient {
     const useSmartPos = props.x === undefined;
     const explicitX = props.x || 0;
     const y = props.y || 0;
+    // New: clip defaults to false (don't clip auto-layout overflow)
+    const clip = props.clip === 'true' || props.clip === true;
+    // New: hug for auto-sizing (hug="both" | "w" | "h" | "width" | "height")
+    const hug = props.hug || '';
+    const hugWidth = hug === 'both' || hug === 'w' || hug === 'width';
+    const hugHeight = hug === 'both' || hug === 'h' || hug === 'height';
 
     // Collect all fonts recursively
     const fonts = new Set();
@@ -474,12 +480,18 @@ export class FigmaClient {
           const fPy = item.py !== undefined ? item.py : (fP !== null ? fP : 10);
           const fAlign = item.align || 'center';
           const fJustify = item.justify || 'center';
+          // Clip defaults to false for nested frames
+          const fClip = item.clip === 'true' || item.clip === true;
 
           // HUG by default, FIXED only if explicit size given
           const hasWidth = item.w !== undefined || item.width !== undefined;
           const hasHeight = item.h !== undefined || item.height !== undefined;
           const fWidth = item.w || item.width || 100;
           const fHeight = item.h || item.height || 40;
+
+          // Support w="fill" for nested frames
+          const fillWidth = item.w === 'fill';
+          const fillHeight = item.h === 'fill';
 
           // Map align/justify to Figma values
           const alignMap = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH' };
@@ -492,9 +504,11 @@ export class FigmaClient {
         const el${idx} = figma.createFrame();
         el${idx}.name = ${JSON.stringify(fName)};
         el${idx}.layoutMode = '${fFlex === 'row' ? 'HORIZONTAL' : 'VERTICAL'}';
-        el${idx}.primaryAxisSizingMode = '${hasWidth ? 'FIXED' : 'AUTO'}';
-        el${idx}.counterAxisSizingMode = '${hasHeight ? 'FIXED' : 'AUTO'}';
-        ${hasWidth || hasHeight ? `el${idx}.resize(${fWidth}, ${fHeight});` : ''}
+        el${idx}.primaryAxisSizingMode = '${hasWidth && !fillWidth ? 'FIXED' : 'AUTO'}';
+        el${idx}.counterAxisSizingMode = '${hasHeight && !fillHeight ? 'FIXED' : 'AUTO'}';
+        ${hasWidth && !fillWidth || hasHeight && !fillHeight ? `el${idx}.resize(${hasWidth ? fWidth : 100}, ${hasHeight ? fHeight : 40});` : ''}
+        ${fillWidth ? `el${idx}.layoutSizingHorizontal = 'FILL';` : ''}
+        ${fillHeight ? `el${idx}.layoutSizingVertical = 'FILL';` : ''}
         el${idx}.itemSpacing = ${fGap};
         el${idx}.paddingTop = ${fPy};
         el${idx}.paddingBottom = ${fPy};
@@ -505,6 +519,7 @@ export class FigmaClient {
         ${fStroke ? `el${idx}.strokes = [{type:'SOLID',color:${this.hexToRgbCode(fStroke)}}]; el${idx}.strokeWeight = 1;` : ''}
         el${idx}.primaryAxisAlignItems = '${fJustifyVal}';
         el${idx}.counterAxisAlignItems = '${fAlignVal}';
+        el${idx}.clipsContent = ${fClip};
         ${parentVar}.appendChild(el${idx});
         ${nestedChildren}`;
         } else if (item._type === 'rect') {
@@ -621,9 +636,9 @@ export class FigmaClient {
         frame.paddingRight = ${px};
         frame.primaryAxisAlignItems = '${justifyVal}';
         frame.counterAxisAlignItems = '${alignVal}';
-        frame.primaryAxisSizingMode = 'FIXED';
-        frame.counterAxisSizingMode = 'FIXED';
-        frame.clipsContent = true;
+        frame.primaryAxisSizingMode = '${hugWidth ? 'AUTO' : 'FIXED'}';
+        frame.counterAxisSizingMode = '${hugHeight ? 'AUTO' : 'FIXED'}';
+        frame.clipsContent = ${clip};
 
         ${childCode}
 

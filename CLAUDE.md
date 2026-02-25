@@ -214,6 +214,12 @@ node src/index.js create image "https://example.com/photo.png" -w 200  # Scale t
 node src/index.js create image "https://example.com/photo.png" -w 200 -h 200  # Fixed size
 ```
 
+"Add an image with background removed" (requires rembg: `pipx install "rembg[cli]"` then `pipx inject rembg onnxruntime`)
+```bash
+node src/index.js create image-nobg "https://example.com/person.png"
+node src/index.js create image-nobg "https://example.com/person.png" -w 200  # Scale
+```
+
 "Group selection"
 ```bash
 node src/index.js create group "Header"

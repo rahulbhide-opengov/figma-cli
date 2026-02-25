@@ -439,7 +439,7 @@ program.action(async () => {
           console.log(chalk.white('  Opening System Settings for you...'));
           console.log(chalk.gray('  1. Click + and add your Terminal app'));
           console.log(chalk.gray('  2. Quit Terminal completely (Cmd+Q)'));
-          console.log(chalk.gray('  3. Reopen Terminal and run: node src/index.js init\n'));
+          console.log(chalk.gray('  3. Reopen Terminal and try again\n'));
 
           // Open System Settings directly to Full Disk Access
           try {
@@ -604,7 +604,7 @@ program
           console.log(chalk.white('  Opening System Settings for you...'));
           console.log(chalk.gray('  1. Click + and add your Terminal app'));
           console.log(chalk.gray('  2. Quit Terminal completely (Cmd+Q)'));
-          console.log(chalk.gray('  3. Reopen Terminal and run: node src/index.js init\n'));
+          console.log(chalk.gray('  3. Reopen Terminal and try again\n'));
 
           // Open System Settings directly to Full Disk Access
           try {
@@ -760,8 +760,8 @@ program
           console.log(chalk.cyan('  Step 1: ') + chalk.white('System Settings is opening...'));
           console.log(chalk.cyan('  Step 2: ') + chalk.white('Click the ') + chalk.yellow('+') + chalk.white(' button'));
           console.log(chalk.cyan('  Step 3: ') + chalk.white('Add ') + chalk.yellow('Terminal') + chalk.white(' (or iTerm/VS Code)'));
-          console.log(chalk.cyan('  Step 4: ') + chalk.white('Quit Terminal ') + chalk.gray('(Cmd+Q)'));
-          console.log(chalk.cyan('  Step 5: ') + chalk.white('Reopen and run ') + chalk.yellow('node src/index.js connect') + '\n');
+          console.log(chalk.cyan('  Step 4: ') + chalk.white('Quit Terminal completely ') + chalk.gray('(Cmd+Q)'));
+          console.log(chalk.cyan('  Step 5: ') + chalk.white('Reopen Terminal and try again\n'));
 
           // Open System Settings
           try {

@@ -59,19 +59,6 @@ This project includes a `CLAUDE.md` file that Claude reads automatically. It con
 
 No explaining. No teaching. Just ask.
 
-### Extra Features
-
-Things you get here that MCP tools don't have:
-
-- **150k+ Iconify icons** — Insert any icon instantly
-- **Unsplash integration** — Stock photos in one command
-- **Tailwind/shadcn presets** — Complete color systems ready to go
-- **Lorem ipsum generator** — Placeholder text
-- **FigJam support** — Sticky notes, shapes, connectors
-- **8 lint rules** — Catch design issues automatically
-- **Color blindness simulation** — Test accessibility
-- **XPath queries** — Find nodes with `//FRAME[@width > 300]`
-
 ---
 
 ## Requirements

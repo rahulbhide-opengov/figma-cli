@@ -58,12 +58,37 @@ npx figma-use node to-component "2:123"
 
 ## Key Learnings
 
-1. **ALWAYS use `render` for frames with text** - eval with async font loading creates incomplete content
-2. **Use `eval` only for non-text operations** - Color palettes, variable bindings, deletions, moves
-3. **Use `npx figma-use` directly** - Faster than wrapper commands, especially with daemon
-4. **Write scripts to `/tmp/`** - Run with `npx figma-use eval "$(cat /tmp/script.js)"`
-5. **Convert frames with `node to-component`** - `npx figma-use node to-component "id1 id2 id3"`
-6. **Always verify with `node tree`** - Check all children are present after creation
+1. **ALWAYS use `render` for creating frames** - It has smart positioning (no overlaps) and handles fonts correctly
+2. **NEVER use `eval` to create visual elements** - No smart positioning, elements will overlap at (0,0)
+3. **Use `eval` ONLY for**: Variable bindings, deletions, moves, property changes on existing nodes
+4. **Use `npx figma-use` directly** - Faster than wrapper commands, especially with daemon
+5. **Write scripts to `/tmp/`** - Run with `npx figma-use eval "$(cat /tmp/script.js)"`
+6. **Convert frames with `node to-component`** - `npx figma-use node to-component "id1 id2 id3"`
+7. **Always verify with `node tree`** - Check all children are present after creation
+
+## CRITICAL: Smart Positioning
+
+The `render` command automatically positions new frames to the RIGHT of existing content (100px gap).
+
+```bash
+# CORRECT - uses smart positioning
+node src/index.js render '<Frame name="Card" w={300} h={200} bg="#fff" p={24}><Text>Hello</Text></Frame>'
+
+# WRONG - will overlap at (0,0)
+node src/index.js eval "const f = figma.createFrame(); f.name = 'Card';"
+```
+
+If you MUST use eval to create elements, ALWAYS include smart positioning code:
+```javascript
+// Get next free X position FIRST
+let smartX = 0;
+figma.currentPage.children.forEach(n => { smartX = Math.max(smartX, n.x + n.width); });
+smartX += 100;
+
+// Then create element at smartX
+const frame = figma.createFrame();
+frame.x = smartX;
+```
 
 ## What Users Might Ask → Commands
 
@@ -603,40 +628,19 @@ node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={
 ### IMPORTANT: Create Elements INSIDE Frames
 
 When user says "create a design":
-1. **Use the `render` command** with JSX for frames with text
+1. **Use the `render` command** - it has smart positioning built-in
 2. **All elements INSIDE** the frame automatically with JSX nesting
 3. **Never loose elements** directly on canvas
 
-```javascript
-// CORRECT: Frame with complete Auto-Layout setup
-const frame = figma.createFrame();
-frame.name = 'Card';
-frame.resize(300, 200);
-frame.cornerRadius = 16;
-
-// Auto-Layout MUST be set
-frame.layoutMode = 'VERTICAL';           // or 'HORIZONTAL'
-frame.primaryAxisSizingMode = 'FIXED';   // or 'AUTO' for hug
-frame.counterAxisSizingMode = 'FIXED';   // or 'AUTO' for hug
-frame.itemSpacing = 12;                  // Gap between children
-frame.paddingTop = 24;
-frame.paddingBottom = 24;
-frame.paddingLeft = 24;
-frame.paddingRight = 24;
-frame.clipsContent = true;               // Clip content
-
-// Text with FILL width so it does NOT overflow the frame
-const title = figma.createText();
-title.characters = 'Title';
-title.layoutSizingHorizontal = 'FILL';   // IMPORTANT: Text fills width
-frame.appendChild(title);
-
-const body = figma.createText();
-body.characters = 'Body text that might be longer';
-body.layoutSizingHorizontal = 'FILL';    // IMPORTANT: Text fills width
-body.textAutoResize = 'HEIGHT';          // IMPORTANT: Height adjusts
-frame.appendChild(body);
+```bash
+# ALWAYS USE RENDER - has smart positioning, no overlaps
+node src/index.js render '<Frame name="Card" w={300} h={200} bg="#fff" rounded={16} flex="col" gap={12} p={24}>
+  <Text size={16} weight="bold">Title</Text>
+  <Text size={14} color="#666" w="fill">Body text that might be longer</Text>
+</Frame>'
 ```
+
+**DO NOT use eval to create frames** - they will overlap at (0,0).
 
 ### Auto-Layout Text Settings (CRITICAL)
 

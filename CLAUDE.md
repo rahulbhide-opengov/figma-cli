@@ -6,58 +6,47 @@ CLI that controls Figma Desktop directly. No API key needed.
 
 When user asks to "recreate", "rebuild", "copy", or "clone" a website:
 
-### Step 1: Analyze with Playwright (BEST METHOD)
+### One-Command Recreation (RECOMMENDED)
+```bash
+node src/index.js recreate-url "https://example.com" --name "My Page"
+```
+
+This does everything automatically:
+1. Analyzes the page with Playwright (1440px desktop viewport)
+2. Extracts exact CSS values (colors, fonts, sizes, positions)
+3. Generates Figma code
+4. Creates the page in Figma (~4-5 seconds total)
+
+**Options:**
+- `-w, --width <n>` - Viewport width (default: 1440)
+- `-h, --height <n>` - Viewport height (default: 900)
+- `--name <name>` - Frame name (default: "Recreated Page")
+
+**Examples:**
+```bash
+# Desktop (default 1440px)
+node src/index.js recreate-url "https://notion.so/login" --name "Notion Login"
+
+# Mobile
+node src/index.js recreate-url "https://notion.so/login" -w 375 -h 812 --name "Notion Mobile"
+```
+
+### Manual Analysis Only
+If you need just the data without creating in Figma:
 ```bash
 node src/index.js analyze-url "https://example.com/page" --screenshot
 ```
 
-This extracts EXACT CSS values:
-- Colors as hex (#2383e2)
-- Font sizes (22px), weights (600), families (inter)
-- Element dimensions (width, height)
-- Border radius, padding
-- Element positions (x, y)
-
-### Step 2: Review the Data
-The output is JSON with all elements:
+Returns JSON with all elements:
 ```json
 {
   "bodyBg": "#fffefc",
   "elements": [
-    { "tag": "h1", "text": "Title", "fontSize": "22px", "fontWeight": "600", "color": "#040404" },
-    { "tag": "button", "text": "Continue", "w": 360, "h": 40, "bgColor": "#2383e2", "borderRadius": "8px" }
+    { "type": "heading", "text": "Title", "fontSize": 22, "fontWeight": 600, "color": "#040404", "x": 560, "y": 146 },
+    { "type": "button", "text": "Continue", "w": 360, "h": 40, "bgColor": "#2383e2", "borderRadius": 8 }
   ]
 }
 ```
-
-### Step 3: View Screenshot (Optional)
-```bash
-# Screenshot is saved at /tmp/analyze-screenshot.png
-Read /tmp/analyze-screenshot.png
-```
-
-### Step 4: Build in Figma
-Use the exact values from Playwright:
-
-```javascript
-// Convert hex to Figma RGB: #2383e2 → { r: 0.14, g: 0.51, b: 0.89 }
-const hexToRgb = (hex) => {
-  const r = parseInt(hex.slice(1,3), 16) / 255;
-  const g = parseInt(hex.slice(3,5), 16) / 255;
-  const b = parseInt(hex.slice(5,7), 16) / 255;
-  return { r, g, b };
-};
-
-const main = figma.createFrame();
-main.fills = [{ type: "SOLID", color: hexToRgb("#fffefc") }];
-// ... use exact dimensions from Playwright
-```
-
-### Key Tips
-- **Desktop viewport**: Use `-w 1440` for desktop layouts (default)
-- **Mobile viewport**: Use `-w 375 -h 812` for mobile
-- Load fonts BEFORE creating text: `await figma.loadFontAsync({ family: "Inter", style: "Bold" })`
-- Set `layoutSizingHorizontal = "FILL"` AFTER appending to auto-layout parent
 
 ### Alternative: Screenshot Only
 If Playwright fails, use capture-website-cli:

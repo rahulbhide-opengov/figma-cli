@@ -1886,6 +1886,287 @@ const { chromium } = require('playwright');
     }
   });
 
+// ============ RECREATE URL (Playwright + Figma) ============
+
+program
+  .command('recreate-url <url>')
+  .alias('recreate')
+  .description('Analyze a webpage and recreate it in Figma (desktop 1440px)')
+  .option('-w, --width <n>', 'Viewport width', '1440')
+  .option('-h, --height <n>', 'Viewport height', '900')
+  .option('--name <name>', 'Frame name', 'Recreated Page')
+  .action(async (url, options) => {
+    checkConnection();
+
+    const spinner = ora('Analyzing ' + url + ' with Playwright...').start();
+
+    try {
+      // Step 1: Analyze with Playwright
+      const analyzeScript = `
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: ${options.width}, height: ${options.height} } });
+
+  await page.goto('${url}', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(3000);
+
+  const data = await page.evaluate(() => {
+    const rgbToHex = (rgb) => {
+      if (!rgb || rgb === 'rgba(0, 0, 0, 0)') return 'transparent';
+      const match = rgb.match(/\\d+/g);
+      if (!match || match.length < 3) return rgb;
+      const [r, g, b] = match.map(Number);
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    };
+
+    const getStyles = (el) => {
+      const cs = window.getComputedStyle(el);
+      return {
+        color: rgbToHex(cs.color),
+        bgColor: rgbToHex(cs.backgroundColor),
+        fontSize: parseInt(cs.fontSize) || 16,
+        fontWeight: parseInt(cs.fontWeight) || 400,
+        fontFamily: cs.fontFamily.split(',')[0].replace(/"/g, '').trim(),
+        borderRadius: parseInt(cs.borderRadius) || 0,
+        borderWidth: parseInt(cs.borderWidth) || 0,
+        borderColor: rgbToHex(cs.borderColor),
+        paddingTop: parseInt(cs.paddingTop) || 0,
+        paddingRight: parseInt(cs.paddingRight) || 0,
+        paddingBottom: parseInt(cs.paddingBottom) || 0,
+        paddingLeft: parseInt(cs.paddingLeft) || 0
+      };
+    };
+
+    const results = {
+      url: window.location.href,
+      title: document.title,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      bodyBg: rgbToHex(window.getComputedStyle(document.body).backgroundColor),
+      elements: []
+    };
+
+    // Get headings
+    document.querySelectorAll('h1, h2, h3').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 20 && rect.height > 10 && rect.top < 1200 && rect.top > -50) {
+        results.elements.push({
+          type: 'heading',
+          tag: el.tagName.toLowerCase(),
+          text: (el.innerText || '').slice(0, 200).trim(),
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          ...getStyles(el)
+        });
+      }
+    });
+
+    // Get buttons
+    document.querySelectorAll('button, [role="button"], input[type="submit"], a[class*="btn"], [class*="button"]').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 30 && rect.height > 20 && rect.top < 1200 && rect.top > -50) {
+        results.elements.push({
+          type: 'button',
+          text: (el.innerText || el.value || '').slice(0, 80).trim(),
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          ...getStyles(el)
+        });
+      }
+    });
+
+    // Get inputs
+    document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"], textarea').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 50 && rect.height > 20 && rect.top < 1200 && rect.top > -50) {
+        results.elements.push({
+          type: 'input',
+          placeholder: el.placeholder || '',
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          ...getStyles(el)
+        });
+      }
+    });
+
+    // Get paragraphs/labels
+    document.querySelectorAll('p, label, span').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      const text = (el.innerText || '').trim();
+      if (rect.width > 20 && rect.height > 10 && rect.top < 1200 && rect.top > -50 && text.length > 2 && text.length < 500) {
+        results.elements.push({
+          type: 'text',
+          text: text.slice(0, 200),
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          ...getStyles(el)
+        });
+      }
+    });
+
+    return results;
+  });
+
+  console.log(JSON.stringify(data));
+  await browser.close();
+})();
+`;
+
+      const scriptPath = '/tmp/figma-recreate-analyze.js';
+      writeFileSync(scriptPath, analyzeScript);
+
+      const analysisResult = execSync('cd /tmp && node figma-recreate-analyze.js', {
+        encoding: 'utf8',
+        timeout: 90000,
+        maxBuffer: 10 * 1024 * 1024
+      });
+
+      const data = JSON.parse(analysisResult);
+      spinner.text = 'Generating Figma code...';
+
+      // Step 2: Generate Figma code
+      const hexToRgb = (hex) => {
+        if (!hex || hex === 'transparent') return '{ r: 1, g: 1, b: 1 }';
+        const h = hex.replace('#', '');
+        const r = (parseInt(h.slice(0, 2), 16) / 255).toFixed(3);
+        const g = (parseInt(h.slice(2, 4), 16) / 255).toFixed(3);
+        const b = (parseInt(h.slice(4, 6), 16) / 255).toFixed(3);
+        return `{ r: ${r}, g: ${g}, b: ${b} }`;
+      };
+
+      const getFontStyle = (weight) => {
+        if (weight >= 700) return 'Bold';
+        if (weight >= 600) return 'SemiBold';
+        if (weight >= 500) return 'Medium';
+        return 'Regular';
+      };
+
+      // Collect unique font styles needed
+      const fontStyles = new Set(['Regular']);
+      data.elements.forEach(el => {
+        fontStyles.add(getFontStyle(el.fontWeight || 400));
+      });
+
+      // Build Figma script
+      let figmaCode = `(async function() {
+  // Load fonts
+${[...fontStyles].map(style => `  await figma.loadFontAsync({ family: "Inter", style: "${style}" });`).join('\n')}
+
+  // Smart positioning
+  let smartX = 0;
+  figma.currentPage.children.forEach(n => { smartX = Math.max(smartX, n.x + n.width); });
+  smartX += 100;
+
+  // Main desktop frame
+  const main = figma.createFrame();
+  main.name = "${options.name}";
+  main.resize(${options.width}, ${options.height});
+  main.fills = [{ type: "SOLID", color: ${hexToRgb(data.bodyBg)} }];
+  main.x = smartX;
+  main.y = 0;
+  main.clipsContent = true;
+
+`;
+
+      // Add elements
+      data.elements.forEach((el, i) => {
+        if (el.type === 'heading' || el.type === 'text') {
+          const text = (el.text || '').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+          if (!text) return;
+          figmaCode += `
+  // ${el.type}: ${text.slice(0, 30)}
+  const t${i} = figma.createText();
+  t${i}.fontName = { family: "Inter", style: "${getFontStyle(el.fontWeight)}" };
+  t${i}.characters = "${text}";
+  t${i}.fontSize = ${el.fontSize || 16};
+  t${i}.fills = [{ type: "SOLID", color: ${hexToRgb(el.color)} }];
+  t${i}.x = ${el.x};
+  t${i}.y = ${el.y};
+  main.appendChild(t${i});
+`;
+        } else if (el.type === 'button') {
+          const text = (el.text || '').replace(/"/g, '\\"').replace(/\n/g, ' ').trim();
+          if (!text) return;
+          figmaCode += `
+  // Button: ${text.slice(0, 30)}
+  const btn${i} = figma.createFrame();
+  btn${i}.name = "${text.slice(0, 20)}";
+  btn${i}.resize(${el.w}, ${el.h});
+  btn${i}.x = ${el.x};
+  btn${i}.y = ${el.y};
+  btn${i}.cornerRadius = ${el.borderRadius || 0};
+  btn${i}.fills = [{ type: "SOLID", color: ${hexToRgb(el.bgColor)} }];
+  ${el.borderWidth > 0 ? `btn${i}.strokes = [{ type: "SOLID", color: ${hexToRgb(el.borderColor)} }]; btn${i}.strokeWeight = ${el.borderWidth};` : ''}
+  btn${i}.layoutMode = "HORIZONTAL";
+  btn${i}.primaryAxisAlignItems = "CENTER";
+  btn${i}.counterAxisAlignItems = "CENTER";
+  const btnTxt${i} = figma.createText();
+  btnTxt${i}.fontName = { family: "Inter", style: "${getFontStyle(el.fontWeight)}" };
+  btnTxt${i}.characters = "${text}";
+  btnTxt${i}.fontSize = ${el.fontSize || 14};
+  btnTxt${i}.fills = [{ type: "SOLID", color: ${hexToRgb(el.color)} }];
+  btn${i}.appendChild(btnTxt${i});
+  main.appendChild(btn${i});
+`;
+        } else if (el.type === 'input') {
+          const placeholder = (el.placeholder || 'Enter text...').replace(/"/g, '\\"');
+          figmaCode += `
+  // Input
+  const input${i} = figma.createFrame();
+  input${i}.name = "Input";
+  input${i}.resize(${el.w}, ${el.h});
+  input${i}.x = ${el.x};
+  input${i}.y = ${el.y};
+  input${i}.cornerRadius = ${el.borderRadius || 4};
+  input${i}.fills = [{ type: "SOLID", color: ${hexToRgb(el.bgColor)} }];
+  ${el.borderWidth > 0 ? `input${i}.strokes = [{ type: "SOLID", color: ${hexToRgb(el.borderColor)} }]; input${i}.strokeWeight = ${el.borderWidth};` : ''}
+  input${i}.layoutMode = "HORIZONTAL";
+  input${i}.counterAxisAlignItems = "CENTER";
+  input${i}.paddingLeft = ${el.paddingLeft || 12};
+  const ph${i} = figma.createText();
+  ph${i}.fontName = { family: "Inter", style: "Regular" };
+  ph${i}.characters = "${placeholder}";
+  ph${i}.fontSize = ${el.fontSize || 14};
+  ph${i}.fills = [{ type: "SOLID", color: { r: 0.6, g: 0.6, b: 0.6 } }];
+  input${i}.appendChild(ph${i});
+  main.appendChild(input${i});
+`;
+        }
+      });
+
+      figmaCode += `
+  figma.viewport.scrollAndZoomIntoView([main]);
+  return "Recreated ${data.elements.length} elements from ${url}";
+})()`;
+
+      // Step 3: Execute via figma-use (reliable with async code)
+      spinner.text = 'Creating in Figma...';
+
+      const figmaScriptPath = '/tmp/figma-recreate-build.js';
+      writeFileSync(figmaScriptPath, figmaCode);
+      execSync(`npx figma-use eval "$(cat ${figmaScriptPath})"`, { stdio: 'pipe', timeout: 60000 });
+      spinner.succeed('Page recreated in Figma');
+      console.log(chalk.green('✓ ') + chalk.white(`Created ${data.elements.length} elements`));
+      console.log(chalk.gray(`  Frame: "${options.name}" (${options.width}x${options.height})`));
+      console.log(chalk.gray(`  Source: ${url}`));
+
+      // Cleanup
+      try { unlinkSync(scriptPath); } catch {}
+    } catch (e) {
+      spinner.fail('Recreation failed: ' + e.message);
+      if (process.env.DEBUG) console.error(e);
+    }
+  });
+
 // ============ REMOVE BACKGROUND ============
 
 program

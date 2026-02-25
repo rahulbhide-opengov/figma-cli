@@ -305,7 +305,7 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 
 ## Author
 
-**Sil Bormüller** — [intodesignsystems.com](https://intodesignsystems.com)
+**[Sil Bormüller](https://www.linkedin.com/in/silbormueller/)** — [intodesignsystems.com](https://intodesignsystems.com)
 
 ## License
 

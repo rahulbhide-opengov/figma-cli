@@ -733,68 +733,83 @@ node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={
 
 **Why?** The `eval` command with async functions has issues with font loading and appendChild timing. The `render` command handles fonts and nesting correctly.
 
-### Render Command Reference
+### Render Command Reference (figma-use)
 
-**Supported JSX Elements:**
-- `<Frame>` - Auto-layout frame (container)
-- `<Text>` - Text with content
-- `<Rectangle>` / `<Rect>` - Rectangle shape
-- `<Image>` - Image placeholder
-- `<Icon>` - Icon placeholder
+**Uses `figma-use render` under the hood - full JSX support!**
+
+**Elements:**
+- `<Frame>` - Auto-layout frame
+- `<Rectangle>` - Rectangle shape
+- `<Ellipse>` - Circle/oval
+- `<Text>` - Text layer
+- `<Line>` - Line
+- `<Image>` - Image (with src URL)
+- `<SVG>` - SVG (with src URL or inline)
+- `<Icon>` - Lucide icon
 - `<Instance>` - Component instance
 
-```bash
-# Frame with auto-layout
-<Frame name="Name" w={320} h={180} bg="#color" rounded={16} flex="col" gap={8} p={24}>
+**Size & Position:**
+```jsx
+w={320} h={200}        // Fixed size
+w="fill" h="fill"      // Fill parent
+minW={100} maxW={500}  // Constraints
+x={100} y={50}         // Position
+```
 
-# Frame that hugs content (auto-size)
-<Frame name="Auto" hug="both" flex="row" gap={8}>
-<Frame name="Auto Width" hug="w" h={200}>
-<Frame name="Auto Height" hug="h" w={300}>
+**Layout (Auto-layout):**
+```jsx
+flex="row"             // Direction: "row" | "col"
+gap={16}               // Spacing between items
+wrap={true}            // Enable flex wrap
+justify="between"      // Main axis: "start" | "center" | "end" | "between"
+items="center"         // Cross axis: "start" | "center" | "end"
+p={24}                 // Padding all sides
+px={16} py={8}         // Padding x/y axis
+pt={8} pr={16}...      // Individual padding
+stretch={true}         // Stretch to fill cross-axis
+grow={1}               // Flex grow
+```
 
-# Frame with clipping disabled (DEFAULT - content can overflow)
-<Frame clip={false} ...>
+**Appearance:**
+```jsx
+bg="#3B82F6"           // Fill color
+stroke="#E4E4E7"       // Stroke color
+strokeWidth={1}        // Stroke thickness
+opacity={0.5}          // Opacity
+```
 
-# Frame with clipping enabled (content is cut off at edges)
-<Frame clip={true} ...>
+**Corners & Effects:**
+```jsx
+rounded={16}           // Corner radius
+roundedTL={8}          // Individual corners
+overflow="hidden"      // Clip content (important!)
+shadow="0 4 12 #0001"  // Drop shadow
+blur={10}              // Layer blur
+rotate={45}            // Rotation
+```
 
-# Nested frame that fills parent width
-<Frame w="fill" ...>
-
-# Text with fill width (prevents overflow)
-<Text size={14} color="#color" w="fill">Content</Text>
-
-# Rectangle
-<Rectangle w={100} h={100} bg="#e4e4e7" rounded={8} />
-
-# Component Instance (by ID or name)
-<Instance component="2:28" />
-<Instance name="Card - Basic" />
-
-# Position on canvas
-<Frame x={1000} y={0} ...>
+**Text:**
+```jsx
+<Text size={18} weight="bold" color="#000" font="Inter">Hello</Text>
 ```
 
 ### Auto-Layout Best Practices
 
 **IMPORTANT:** To avoid clipped/cut-off content:
 
-1. **Use `hug="both"`** for containers that should grow with content
+1. **Don't set fixed w/h** unless you specifically want fixed size
 2. **Use `w="fill"`** for nested frames/text that should fill parent width
-3. **Don't set fixed w/h** unless you specifically want fixed size
-4. **clip defaults to false** - content won't be cut off
+3. **Only use `overflow="hidden"`** when you want clipping
 
 ```bash
-# GOOD: Gallery that grows with cards
-<Frame name="Gallery" hug="both" flex="row" gap={24} p={40}>
+# GOOD: Gallery that grows with cards (no fixed size)
+node src/index.js render '<Frame name="Gallery" flex="row" gap={24} p={40} bg="#f4f4f5">
   <Instance name="Card 1" />
   <Instance name="Card 2" />
-</Frame>
+</Frame>'
 
-# BAD: Fixed size gallery (cards may be clipped)
-<Frame name="Gallery" w={800} h={400} flex="row" gap={24}>
-  ...
-</Frame>
+# BAD: Fixed size = cards may be clipped
+<Frame w={800} h={400} overflow="hidden">
 ```
 
 ### Using Component Instances

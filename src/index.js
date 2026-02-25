@@ -3395,66 +3395,37 @@ results.length === 0 ? 'No nodes found matching "${name}"' : results.slice(0, ${
 
 program
   .command('render <jsx>')
-  .description('Render JSX to Figma')
-  .action(async (jsx) => {
+  .description('Render JSX to Figma (uses figma-use render)')
+  .option('--parent <id>', 'Parent node ID')
+  .option('-x <n>', 'X position')
+  .option('-y <n>', 'Y position')
+  .action(async (jsx, options) => {
     await checkConnection();
     try {
-      let result;
-      let usedFallback = false;
+      // Use figma-use render directly - it has full JSX support
+      let cmd = 'npx figma-use render --stdin --json';
+      if (options.parent) cmd += ` --parent "${options.parent}"`;
+      if (options.x) cmd += ` --x ${options.x}`;
+      if (options.y) cmd += ` --y ${options.y}`;
 
-      // Try daemon first
-      if (isDaemonRunning()) {
-        try {
-          result = await daemonExec('render', { jsx });
-        } catch (daemonError) {
-          console.log(chalk.yellow('⚠ Daemon failed, trying fallback...'));
-          result = null;
-        }
-      }
+      const output = execSync(cmd, {
+        input: jsx,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 30000
+      });
 
-      // Try direct client
-      if (!result) {
-        try {
-          const client = await getFigmaClient();
-          result = await client.render(jsx);
-        } catch (clientError) {
-          // Fall back to npx figma-use
-          console.log(chalk.yellow('⚠ Direct connection failed, using figma-use...'));
-          usedFallback = true;
-
-          const { FigmaClient } = await import('./figma-client.js');
-          const tempClient = new FigmaClient();
-          const code = tempClient.parseJSX(jsx);
-
-          // Write code to temp file and execute via figma-use
-          const tempFile = '/tmp/figma-render-' + Date.now() + '.js';
-          writeFileSync(tempFile, code);
-          const output = execSync(`npx figma-use eval "$(cat ${tempFile})"`, {
-            encoding: 'utf8',
-            stdio: 'pipe',
-            timeout: 30000
-          });
-          unlinkSync(tempFile);
-
-          // Parse result from output
-          try {
-            result = JSON.parse(output.trim());
-          } catch {
-            result = { id: 'unknown', name: jsx.match(/name="([^"]+)"/)?.[1] || 'Frame' };
-          }
-        }
-      }
-
-      console.log(chalk.green('✓ Rendered: ' + result.id) + (usedFallback ? chalk.gray(' (via figma-use)') : ''));
-      console.log(chalk.gray('  name: ' + result.name));
+      const result = JSON.parse(output.trim());
+      console.log(chalk.green('✓ Rendered: ' + result.id));
+      if (result.name) console.log(chalk.gray('  name: ' + result.name));
     } catch (e) {
-      console.log(chalk.red('✗ Render failed: ' + e.message));
+      console.log(chalk.red('✗ Render failed: ' + (e.stderr || e.message)));
     }
   });
 
 program
   .command('render-batch')
-  .description('Render multiple JSX frames in one call (fast)')
+  .description('Render multiple JSX frames (uses figma-use render)')
   .argument('<jsxArray>', 'JSON array of JSX strings, e.g. \'["<Frame>...</Frame>","<Frame>...</Frame>"]\'')
   .action(async (jsxArrayStr) => {
     await checkConnection();
@@ -3465,52 +3436,24 @@ program
       }
 
       let results = [];
-      let usedFallback = false;
-
-      // Try daemon first
-      if (isDaemonRunning()) {
+      for (const jsx of jsxArray) {
         try {
-          results = await daemonExec('render-batch', { jsxArray });
-          results.forEach(r => console.log(chalk.green('✓ Rendered: ' + r.id + ' (' + r.name + ')')));
-        } catch (daemonError) {
-          console.log(chalk.yellow('⚠ Daemon failed, trying fallback...'));
-          results = [];
+          const output = execSync('npx figma-use render --stdin --json', {
+            input: jsx,
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            timeout: 30000
+          });
+
+          const result = JSON.parse(output.trim());
+          results.push(result);
+          console.log(chalk.green('✓ Rendered: ' + result.id + (result.name ? ' (' + result.name + ')' : '')));
+        } catch (err) {
+          console.log(chalk.red('✗ Failed to render: ' + (err.stderr || err.message)));
         }
       }
 
-      // Fall back to figma-use if daemon failed or not running
-      if (results.length === 0) {
-        usedFallback = true;
-        const { FigmaClient } = await import('./figma-client.js');
-        const tempClient = new FigmaClient();
-
-        for (const jsx of jsxArray) {
-          try {
-            const code = tempClient.parseJSX(jsx);
-            const tempFile = '/tmp/figma-render-' + Date.now() + '.js';
-            writeFileSync(tempFile, code);
-            const output = execSync(`npx figma-use eval "$(cat ${tempFile})"`, {
-              encoding: 'utf8',
-              stdio: 'pipe',
-              timeout: 30000
-            });
-            unlinkSync(tempFile);
-
-            let result;
-            try {
-              result = JSON.parse(output.trim());
-            } catch {
-              result = { id: 'unknown', name: jsx.match(/name="([^"]+)"/)?.[1] || 'Frame' };
-            }
-            results.push(result);
-            console.log(chalk.green('✓ Rendered: ' + result.id + ' (' + result.name + ')') + chalk.gray(' (via figma-use)'));
-          } catch (err) {
-            console.log(chalk.red('✗ Failed to render: ' + err.message));
-          }
-        }
-      }
-
-      console.log(chalk.cyan(`\n${results.length} frames created`) + (usedFallback ? chalk.gray(' (using figma-use fallback)') : ''));
+      console.log(chalk.cyan(`\n${results.length} frames created`));
     } catch (e) {
       console.log(chalk.red('✗ Batch render failed: ' + e.message));
     }

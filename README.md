@@ -35,6 +35,43 @@ A CLI that connects directly to Figma Desktop and gives you complete control:
 - **Batch Operations** — Rename layers, find/replace text, create 100 variables at once
 - **Works with Claude Code** — Just ask in natural language, Claude knows all commands
 
+## Why This CLI?
+
+Other tools require MCP servers, API keys, or complex setup. This one doesn't.
+
+| | figma-ds-cli | MCP-based tools |
+|---|---|---|
+| **Setup** | Download ZIP, `npm install`, done | Configure MCP server + client |
+| **API Key** | Not needed | Personal Access Token or OAuth |
+| **Claude Code** | Just run `claude` | Manual MCP configuration |
+| **AI Knowledge** | `CLAUDE.md` included, AI knows everything | Teach AI manually |
+| **Designer-friendly** | Yes | Requires technical setup |
+
+### The CLAUDE.md Advantage
+
+This project includes a `CLAUDE.md` file that Claude reads automatically. It contains:
+
+- All available commands and their syntax
+- Best practices (e.g., "use `render` for text-heavy designs")
+- Common requests mapped to solutions
+
+**Example:** You type "Create Tailwind colors" → Claude already knows to run `node src/index.js tokens tailwind` because it's documented in `CLAUDE.md`.
+
+No explaining. No teaching. Just ask.
+
+### Extra Features
+
+Things you get here that MCP tools don't have:
+
+- **150k+ Iconify icons** — Insert any icon instantly
+- **Unsplash integration** — Stock photos in one command
+- **Tailwind/shadcn presets** — Complete color systems ready to go
+- **Lorem ipsum generator** — Placeholder text
+- **FigJam support** — Sticky notes, shapes, connectors
+- **8 lint rules** — Catch design issues automatically
+- **Color blindness simulation** — Test accessibility
+- **XPath queries** — Find nodes with `//FRAME[@width > 300]`
+
 ---
 
 ## Requirements

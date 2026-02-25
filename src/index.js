@@ -3392,20 +3392,45 @@ results.length === 0 ? 'No nodes found matching "${name}"' : results.slice(0, ${
 
 // ============ RENDER ============
 
+// Helper: Get next free X position for smart positioning
+function getNextFreeX(gap = 100) {
+  try {
+    const result = figmaEvalSync(`
+      let maxX = 0;
+      figma.currentPage.children.forEach(n => {
+        maxX = Math.max(maxX, n.x + n.width);
+      });
+      maxX
+    `);
+    return (result || 0) + gap;
+  } catch {
+    return 0;
+  }
+}
+
 program
   .command('render <jsx>')
   .description('Render JSX to Figma (uses figma-use render)')
   .option('--parent <id>', 'Parent node ID')
   .option('-x <n>', 'X position')
   .option('-y <n>', 'Y position')
+  .option('--no-smart-position', 'Disable auto-positioning')
   .action(async (jsx, options) => {
     await checkConnection();
     try {
+      // Calculate smart position if not specified
+      let posX = options.x;
+      let posY = options.y !== undefined ? options.y : 0;
+
+      if (!options.parent && options.x === undefined && options.smartPosition !== false) {
+        posX = getNextFreeX();
+      }
+
       // Use figma-use render directly - it has full JSX support
       let cmd = 'npx figma-use render --stdin --json';
       if (options.parent) cmd += ` --parent "${options.parent}"`;
-      if (options.x) cmd += ` --x ${options.x}`;
-      if (options.y) cmd += ` --y ${options.y}`;
+      if (posX !== undefined) cmd += ` --x ${posX}`;
+      cmd += ` --y ${posY}`;
 
       const output = execSync(cmd, {
         input: jsx,
@@ -3426,7 +3451,8 @@ program
   .command('render-batch')
   .description('Render multiple JSX frames (uses figma-use render)')
   .argument('<jsxArray>', 'JSON array of JSX strings, e.g. \'["<Frame>...</Frame>","<Frame>...</Frame>"]\'')
-  .action(async (jsxArrayStr) => {
+  .option('-g, --gap <n>', 'Gap between frames', '40')
+  .action(async (jsxArrayStr, options) => {
     await checkConnection();
     try {
       const jsxArray = JSON.parse(jsxArrayStr);
@@ -3434,10 +3460,14 @@ program
         throw new Error('Argument must be a JSON array of JSX strings');
       }
 
+      const gap = parseInt(options.gap) || 40;
+      let currentX = getNextFreeX(gap);
       let results = [];
+
       for (const jsx of jsxArray) {
         try {
-          const output = execSync('npx figma-use render --stdin --json', {
+          const cmd = `npx figma-use render --stdin --json --x ${currentX} --y 0`;
+          const output = execSync(cmd, {
             input: jsx,
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -3447,6 +3477,14 @@ program
           const result = JSON.parse(output.trim());
           results.push(result);
           console.log(chalk.green('✓ Rendered: ' + result.id + (result.name ? ' (' + result.name + ')' : '')));
+
+          // Get width of created frame for next position
+          try {
+            const width = figmaEvalSync(`figma.getNodeById('${result.id}')?.width || 300`);
+            currentX += width + gap;
+          } catch {
+            currentX += 300 + gap; // fallback width
+          }
         } catch (err) {
           console.log(chalk.red('✗ Failed to render: ' + (err.stderr || err.message)));
         }

@@ -723,32 +723,53 @@ program
 
 program
   .command('connect')
-  .description('Start Figma with remote debugging enabled')
+  .description('Connect to Figma Desktop')
   .action(async () => {
-    // Fun welcome message (compact: 2 lines so Claude Code doesn't collapse it)
+    // Fun welcome message
     console.log(chalk.hex('#FF6B35')('\n  ✨ Hey designer! ') + chalk.white("Don't be afraid of the terminal!"));
     console.log(chalk.hex('#4ECDC4')('  🎨 Happy vibe coding! ') + chalk.gray('— Sil · ') + chalk.hex('#FF6B35')('intodesignsystems.com\n'));
 
     const config = loadConfig();
 
-    // Auto-patch Figma if needed (first run)
+    // Patch Figma if needed
     if (!config.patched) {
-      const patchSpinner = ora('First run: patching Figma for remote debugging...').start();
+      const patchSpinner = ora('Setting up Figma connection...').start();
       try {
         const patchStatus = isPatched();
         if (patchStatus === true) {
-          patchSpinner.succeed('Figma already patched');
+          patchSpinner.succeed('Figma ready');
         } else if (patchStatus === false) {
           patchFigma();
-          patchSpinner.succeed('Figma patched successfully');
+          patchSpinner.succeed('Figma configured');
         } else {
-          patchSpinner.succeed('Figma ready (no patch needed)');
+          patchSpinner.succeed('Figma ready');
         }
         config.patched = true;
         saveConfig(config);
       } catch (err) {
-        patchSpinner.fail('Failed to patch Figma: ' + err.message);
-        console.log(chalk.yellow('\nTry running: node src/index.js init\n'));
+        patchSpinner.fail('Setup failed');
+
+        // macOS Full Disk Access needed
+        if (process.platform === 'darwin') {
+          console.log(chalk.hex('#FF6B35')('\n  ┌─────────────────────────────────────────────────────┐'));
+          console.log(chalk.hex('#FF6B35')('  │') + chalk.white.bold('  One-time setup required                           ') + chalk.hex('#FF6B35')('│'));
+          console.log(chalk.hex('#FF6B35')('  └─────────────────────────────────────────────────────┘\n'));
+
+          console.log(chalk.white('  Your Terminal needs permission to configure Figma.\n'));
+
+          console.log(chalk.cyan('  Step 1: ') + chalk.white('System Settings is opening...'));
+          console.log(chalk.cyan('  Step 2: ') + chalk.white('Click the ') + chalk.yellow('+') + chalk.white(' button'));
+          console.log(chalk.cyan('  Step 3: ') + chalk.white('Add ') + chalk.yellow('Terminal') + chalk.white(' (or iTerm/VS Code)'));
+          console.log(chalk.cyan('  Step 4: ') + chalk.white('Quit Terminal ') + chalk.gray('(Cmd+Q)'));
+          console.log(chalk.cyan('  Step 5: ') + chalk.white('Reopen and run ') + chalk.yellow('node src/index.js connect') + '\n');
+
+          // Open System Settings
+          try {
+            execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
+          } catch {}
+        } else {
+          console.log(chalk.yellow('\n  Try running as administrator.\n'));
+        }
         return;
       }
     }
@@ -788,7 +809,7 @@ program
     const daemonSpinner = ora('Starting speed daemon...').start();
     try {
       startDaemon();
-      await new Promise(r => setTimeout(r, 1500)); // Give daemon time to start
+      await new Promise(r => setTimeout(r, 1500));
       if (isDaemonRunning()) {
         daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');
       } else {

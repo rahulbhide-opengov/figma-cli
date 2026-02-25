@@ -4,14 +4,102 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
 import { execSync, spawn } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createInterface } from 'readline';
 import { homedir, platform } from 'os';
+import { createServer } from 'http';
 import { FigJamClient } from './figjam-client.js';
 import { FigmaClient } from './figma-client.js';
 import { isPatched, patchFigma, getFigmaCommand } from './figma-patch.js';
+
+// Daemon configuration
+const DAEMON_PORT = 3456;
+const DAEMON_PID_FILE = join(homedir(), '.figma-cli-daemon.pid');
+
+// Check if daemon is running
+function isDaemonRunning() {
+  try {
+    const response = execSync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${DAEMON_PORT}/health`, {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: 1000
+    });
+    return response.trim() === '200';
+  } catch {
+    return false;
+  }
+}
+
+// Send command to daemon (uses native fetch in Node 18+)
+async function daemonExec(action, data = {}) {
+  const response = await fetch(`http://localhost:${DAEMON_PORT}/exec`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...data }),
+    signal: AbortSignal.timeout(60000)
+  });
+
+  const result = await response.json();
+  if (result.error) throw new Error(result.error);
+  return result.result;
+}
+
+// Fast eval via daemon (falls back to slow sync if daemon not running)
+async function fastEval(code) {
+  if (isDaemonRunning()) {
+    return await daemonExec('eval', { code });
+  }
+  // Fallback to direct connection
+  const client = await getFigmaClient();
+  return await client.eval(code);
+}
+
+// Fast render via daemon
+async function fastRender(jsx) {
+  if (isDaemonRunning()) {
+    return await daemonExec('render', { jsx });
+  }
+  const client = await getFigmaClient();
+  return await client.render(jsx);
+}
+
+// Start daemon in background
+function startDaemon() {
+  if (isDaemonRunning()) {
+    return true; // Already running
+  }
+
+  const daemonScript = join(dirname(fileURLToPath(import.meta.url)), 'daemon.js');
+  const child = spawn('node', [daemonScript], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env, DAEMON_PORT: String(DAEMON_PORT) }
+  });
+  child.unref();
+
+  // Save PID
+  writeFileSync(DAEMON_PID_FILE, String(child.pid));
+  return true;
+}
+
+// Stop daemon
+function stopDaemon() {
+  try {
+    if (existsSync(DAEMON_PID_FILE)) {
+      const pid = readFileSync(DAEMON_PID_FILE, 'utf8').trim();
+      try {
+        process.kill(parseInt(pid), 'SIGTERM');
+      } catch {}
+      unlinkSync(DAEMON_PID_FILE);
+    }
+    // Also try to kill by port
+    if (IS_MAC || IS_LINUX) {
+      execSync(`lsof -ti:${DAEMON_PORT} | xargs kill -9 2>/dev/null || true`, { stdio: 'pipe' });
+    }
+  } catch {}
+}
 
 // Platform detection
 const IS_WINDOWS = platform() === 'win32';
@@ -582,6 +670,9 @@ program
       return;
     }
 
+    // Stop any existing daemon
+    stopDaemon();
+
     console.log(chalk.blue('Starting Figma...'));
     try {
       killFigma();
@@ -593,16 +684,36 @@ program
 
     // Wait and check connection
     const spinner = ora('Waiting for connection...').start();
+    let connected = false;
     for (let i = 0; i < 8; i++) {
       await new Promise(r => setTimeout(r, 1000));
       const result = figmaUse('status', { silent: true });
       if (result && result.includes('Connected')) {
         spinner.succeed('Connected to Figma');
         console.log(chalk.gray(result.trim()));
-        return;
+        connected = true;
+        break;
       }
     }
-    spinner.warn('Open a file in Figma to connect');
+
+    if (!connected) {
+      spinner.warn('Open a file in Figma to connect');
+      return;
+    }
+
+    // Start daemon for fast commands
+    const daemonSpinner = ora('Starting speed daemon...').start();
+    try {
+      startDaemon();
+      await new Promise(r => setTimeout(r, 1500)); // Give daemon time to start
+      if (isDaemonRunning()) {
+        daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');
+      } else {
+        daemonSpinner.warn('Daemon failed to start, commands will be slower');
+      }
+    } catch (e) {
+      daemonSpinner.warn('Daemon failed: ' + e.message);
+    }
   });
 
 // ============ VARIABLES ============
@@ -639,6 +750,67 @@ variables
   .action((pattern) => {
     checkConnection();
     figmaUse(`variable find "${pattern}"`);
+  });
+
+// ============ DAEMON ============
+
+const daemon = program
+  .command('daemon')
+  .description('Manage the speed daemon');
+
+daemon
+  .command('status')
+  .description('Check if daemon is running')
+  .action(() => {
+    if (isDaemonRunning()) {
+      console.log(chalk.green('✓ Daemon is running on port ' + DAEMON_PORT));
+    } else {
+      console.log(chalk.yellow('○ Daemon is not running'));
+      console.log(chalk.gray('  Run "figma-ds-cli connect" to start it automatically'));
+    }
+  });
+
+daemon
+  .command('start')
+  .description('Start the daemon manually')
+  .action(async () => {
+    if (isDaemonRunning()) {
+      console.log(chalk.green('✓ Daemon already running'));
+      return;
+    }
+    console.log(chalk.blue('Starting daemon...'));
+    startDaemon();
+    await new Promise(r => setTimeout(r, 1500));
+    if (isDaemonRunning()) {
+      console.log(chalk.green('✓ Daemon started on port ' + DAEMON_PORT));
+    } else {
+      console.log(chalk.red('✗ Failed to start daemon'));
+    }
+  });
+
+daemon
+  .command('stop')
+  .description('Stop the daemon')
+  .action(() => {
+    console.log(chalk.blue('Stopping daemon...'));
+    stopDaemon();
+    console.log(chalk.green('✓ Daemon stopped'));
+  });
+
+daemon
+  .command('restart')
+  .description('Restart the daemon')
+  .action(async () => {
+    console.log(chalk.blue('Restarting daemon...'));
+    stopDaemon();
+    await new Promise(r => setTimeout(r, 500));
+    startDaemon();
+    await new Promise(r => setTimeout(r, 1500));
+    if (isDaemonRunning()) {
+      console.log(chalk.green('✓ Daemon restarted'));
+    } else {
+      console.log(chalk.red('✗ Failed to restart daemon'));
+    }
   });
 
 // ============ COLLECTIONS ============
@@ -2291,8 +2463,13 @@ program
   .action(async (jsx) => {
     await checkConnection();
     try {
-      const client = await getFigmaClient();
-      const result = await client.render(jsx);
+      let result;
+      if (isDaemonRunning()) {
+        result = await daemonExec('render', { jsx });
+      } else {
+        const client = await getFigmaClient();
+        result = await client.render(jsx);
+      }
       console.log(chalk.green('✓ Rendered: ' + result.id));
       console.log(chalk.gray('  name: ' + result.name));
     } catch (e) {
@@ -2311,12 +2488,21 @@ program
       if (!Array.isArray(jsxArray)) {
         throw new Error('Argument must be a JSON array of JSX strings');
       }
-      const client = await getFigmaClient();
-      const results = [];
-      for (const jsx of jsxArray) {
-        const result = await client.render(jsx);
-        results.push(result);
-        console.log(chalk.green('✓ Rendered: ' + result.id + ' (' + result.name + ')'));
+
+      let results;
+      if (isDaemonRunning()) {
+        // Use daemon for all frames at once
+        results = await daemonExec('render-batch', { jsxArray });
+        results.forEach(r => console.log(chalk.green('✓ Rendered: ' + r.id + ' (' + r.name + ')')));
+      } else {
+        // Fallback to direct connection
+        const client = await getFigmaClient();
+        results = [];
+        for (const jsx of jsxArray) {
+          const result = await client.render(jsx);
+          results.push(result);
+          console.log(chalk.green('✓ Rendered: ' + result.id + ' (' + result.name + ')'));
+        }
       }
       console.log(chalk.cyan(`\n${results.length} frames created`));
     } catch (e) {

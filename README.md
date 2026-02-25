@@ -1,6 +1,17 @@
 # figma-ds-cli
 
-CLI for controlling Figma Desktop directly. **No API key required.**
+<p align="center">
+  <img src="https://img.shields.io/badge/Figma-Desktop-purple" alt="Figma Desktop">
+  <img src="https://img.shields.io/badge/No_API_Key-Required-green" alt="No API Key">
+  <img src="https://img.shields.io/badge/Claude_Code-Ready-blue" alt="Claude Code">
+  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT License">
+</p>
+
+<p align="center">
+  <b>Control Figma directly from your terminal.</b><br>
+  Full read/write access to Figma Desktop via Chrome DevTools Protocol.<br>
+  No API key, no plugins, no waiting for approval.
+</p>
 
 ```
   ███████╗██╗ ██████╗ ███╗   ███╗ █████╗       ██████╗ ███████╗       ██████╗██╗     ██╗
@@ -10,6 +21,21 @@ CLI for controlling Figma Desktop directly. **No API key required.**
   ██║     ██║╚██████╔╝██║ ╚═╝ ██║██║  ██║      ██████╔╝███████║      ╚██████╗███████╗██║
   ╚═╝     ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝      ╚═════╝ ╚══════╝       ╚═════╝╚══════╝╚═╝
 ```
+
+## What is This?
+
+A CLI that connects directly to Figma Desktop and gives you complete control:
+
+- **Design Tokens** — Create variables, collections, modes (Light/Dark), bind to nodes
+- **Create Anything** — Frames, text, shapes, icons (150k+ from Iconify), components
+- **Team Libraries** — Import and use components, styles, variables from any library
+- **Analyze Designs** — Colors, typography, spacing, find repeated patterns
+- **Lint & Accessibility** — Contrast checker, touch targets, design rules
+- **Export** — PNG, SVG, JSX, Storybook stories, CSS variables, Tailwind config
+- **Batch Operations** — Rename layers, find/replace text, create 100 variables at once
+- **Works with Claude Code** — Just ask in natural language, Claude knows all commands
+
+---
 
 ## Requirements
 
@@ -89,14 +115,16 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 
 ---
 
-## What It Can Do
+## Full Feature List
 
 ### Design Tokens & Variables
 
 - Create complete design systems (colors, spacing, typography, radii)
 - Create Tailwind CSS color palettes (all 22 color families, 50-950 shades)
 - Create and manage variable collections
-- Create COLOR, FLOAT, STRING variables
+- **Variable modes** (Light/Dark/Mobile) with per-mode values
+- **Batch create** up to 100 variables at once
+- **Batch update** variable values across modes
 - Bind variables to node properties (fill, stroke, gap, padding, radius)
 - Export variables as CSS custom properties
 - Export variables as Tailwind config
@@ -111,6 +139,7 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 - Groups
 - Components from frames
 - Component instances
+- **Component sets with variants**
 
 ### Modify Elements
 
@@ -122,11 +151,14 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 - Rename nodes
 - Duplicate nodes
 - Delete nodes
+- **Flip nodes** (horizontal/vertical)
+- **Scale vectors**
 
 ### Find & Select
 
 - Find nodes by name
 - Find nodes by type (FRAME, COMPONENT, TEXT, etc.)
+- **XPath-like queries** (`//FRAME[@width > 300]`)
 - Select nodes by ID
 - Get node properties
 - Get node tree structure
@@ -143,7 +175,10 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 
 - Export nodes as PNG (with scale factor)
 - Export nodes as SVG
+- **Export multiple sizes** (@1x, @2x, @3x)
 - Take screenshots
+- **Export to JSX** (React code)
+- **Export to Storybook** stories
 - Export variables as CSS
 - Export variables as Tailwind config
 
@@ -174,65 +209,60 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 - **Fill text with placeholder content**
 - **Insert images from URL**
 - **Unsplash integration** (random stock photos by keyword)
-- **Export multiple sizes** (@1x, @2x, @3x)
 - **Contrast checker** (WCAG AA/AAA compliance)
 - **Check text contrast** against background
 - **Find and replace text** across all layers
-- **Select same fill** color
-- **Select same stroke** color
-- **Select same font** and size
-- **Select same size** nodes
+- **Select same** (fill, stroke, font, size)
 - **Color blindness simulation** (deuteranopia, protanopia, tritanopia)
-
-### Export & Convert
-
-- **Export to JSX** - Convert any Figma node to React JSX code
-- **Export to Storybook** - Generate Storybook stories from components
-- **Visual diff** - Compare two nodes and find differences
-- **Create diff patch** - Generate structural patches between versions
 
 ### Query & Analysis
 
-- **XPath-like queries** - Find nodes with powerful selectors
-  - `//FRAME` - all frames
-  - `//TEXT[@fontSize > 20]` - text larger than 20px
-  - `//FRAME[contains(@name, 'Card')]` - frames with 'Card' in name
-- **Analyze colors** - Color usage frequency, variable bindings
-- **Analyze typography** - All font combinations used
-- **Analyze spacing** - Gap/padding values, grid compliance
-- **Find clusters** - Detect repeated patterns (potential components)
-
-### Vector Operations
-
-- Get vector path data
-- Set vector path data
-- Scale vectors
-- Flip nodes (horizontal/vertical)
+- **Analyze colors** — usage frequency, variable bindings
+- **Analyze typography** — all font combinations used
+- **Analyze spacing** — gap/padding values, grid compliance
+- **Find clusters** — detect repeated patterns (potential components)
+- **Visual diff** — compare two nodes
+- **Create diff patch** — structural patches between versions
 
 ### Lint & Accessibility
 
 - **Design linting** with 8+ rules:
-  - `no-default-names` - Detect unnamed layers
-  - `no-deeply-nested` - Flag excessive nesting
-  - `no-empty-frames` - Find empty frames
-  - `prefer-auto-layout` - Suggest auto-layout
-  - `no-hardcoded-colors` - Check variable usage
-  - `color-contrast` - WCAG AA/AAA compliance
-  - `touch-target-size` - Minimum 44x44 check
-  - `min-text-size` - Minimum 12px text
-- **Accessibility snapshot** - Extract interactive elements tree
+  - `no-default-names` — detect unnamed layers
+  - `no-deeply-nested` — flag excessive nesting
+  - `no-empty-frames` — find empty frames
+  - `prefer-auto-layout` — suggest auto-layout
+  - `no-hardcoded-colors` — check variable usage
+  - `color-contrast` — WCAG AA/AAA compliance
+  - `touch-target-size` — minimum 44x44 check
+  - `min-text-size` — minimum 12px text
+- **Accessibility snapshot** — extract interactive elements tree
 
 ### Component Variants
 
 - Create component sets with variants
 - Add variant properties
 - Combine frames into component sets
+- **Organize variants** into grid with labels
+- **Auto-generate component sets** from similar frames
+
+### Component Documentation
+
+- **Add descriptions** to components (supports markdown)
+- **Document with template** (usage, props, notes)
+- Read component descriptions
 
 ### CSS Grid Layout
 
 - Set up grid layout with columns and rows
 - Configure column/row gaps
 - Auto-reorganize children into grid
+
+### Console & Debugging
+
+- **Capture console logs** from Figma
+- **Execute code with log capture**
+- **Reload page**
+- **Navigate to files**
 
 ### Advanced
 
@@ -243,7 +273,7 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 
 ### Not Supported (requires REST API)
 
-- Comments (read/write/delete) - requires Figma API key
+- Comments (read/write/delete) — requires Figma API key
 - Version history
 - Team/project management
 
@@ -251,7 +281,7 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 
 ## Author
 
-**Sil Bormüller** - [intodesignsystems.com](https://intodesignsystems.com)
+**Sil Bormüller** — [intodesignsystems.com](https://intodesignsystems.com)
 
 ## License
 

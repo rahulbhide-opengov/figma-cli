@@ -114,7 +114,9 @@ export class FigmaClient {
 
     if (result.result?.exceptionDetails) {
       const error = result.result.exceptionDetails;
-      throw new Error(error.exception?.description || error.text || 'Evaluation error');
+      // Get the actual error message - Figma puts detailed errors in exception.value
+      const errorValue = error.exception?.value || error.exception?.description || error.text || 'Evaluation error';
+      throw new Error(errorValue);
     }
 
     return result.result?.result?.value;

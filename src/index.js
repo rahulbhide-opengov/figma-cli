@@ -2045,7 +2045,7 @@ const { chromium } = require('playwright');
 
       const getFontStyle = (weight) => {
         if (weight >= 700) return 'Bold';
-        if (weight >= 600) return 'SemiBold';
+        if (weight >= 600) return 'Semi Bold';  // Inter uses "Semi Bold" not "SemiBold"
         if (weight >= 500) return 'Medium';
         return 'Regular';
       };
@@ -2148,12 +2148,17 @@ ${[...fontStyles].map(style => `  await figma.loadFontAsync({ family: "Inter", s
   return "Recreated ${data.elements.length} elements from ${url}";
 })()`;
 
-      // Step 3: Execute via figma-use (reliable with async code)
+      // Step 3: Execute via daemon (fast) or figma-use (fallback)
       spinner.text = 'Creating in Figma...';
 
-      const figmaScriptPath = '/tmp/figma-recreate-build.js';
-      writeFileSync(figmaScriptPath, figmaCode);
-      execSync(`npx figma-use eval "$(cat ${figmaScriptPath})"`, { stdio: 'pipe', timeout: 60000 });
+      if (isDaemonRunning()) {
+        await daemonExec('eval', { code: figmaCode });
+      } else {
+        const figmaScriptPath = '/tmp/figma-recreate-build.js';
+        writeFileSync(figmaScriptPath, figmaCode);
+        execSync(`npx figma-use eval "$(cat ${figmaScriptPath})"`, { stdio: 'pipe', timeout: 60000 });
+      }
+
       spinner.succeed('Page recreated in Figma');
       console.log(chalk.green('✓ ') + chalk.white(`Created ${data.elements.length} elements`));
       console.log(chalk.gray(`  Frame: "${options.name}" (${options.width}x${options.height})`));

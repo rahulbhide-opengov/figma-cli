@@ -40,17 +40,17 @@ cd $HOME\Downloads\figma-cli-main
 claude
 ```
 
-**3. Tell Claude what you want**
+**3. First message to Claude:**
 
-> "Install Node.js if needed, then install dependencies and connect to Figma"
+> "Setup: install dependencies and connect to Figma"
 
-Claude handles everything. Then just ask:
+Claude reads the included CLAUDE.md and knows all commands. After setup, just ask:
 
 > "Create Tailwind colors in Figma"
 > "Add a sticky note to FigJam"
 > "Export my variables as CSS"
 
-Claude reads the documentation and runs the right commands for you.
+**Note:** No `/init` needed. The CLAUDE.md already contains all documentation.
 
 **Works on:** macOS, Windows, and Linux.
 
@@ -266,6 +266,10 @@ figma-ds-cli connects to Figma Desktop via Chrome DevTools Protocol. No API key 
 - Node.js 18+
 - Figma Desktop (free account works)
 - macOS, Windows, or Linux
+
+## For Claude Code Users
+
+The `CLAUDE.md` file contains all commands and best practices. Claude reads it automatically, no `/init` needed. Don't overwrite it.
 
 ## Credits
 

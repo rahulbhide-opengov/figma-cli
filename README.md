@@ -11,6 +11,84 @@ CLI for controlling Figma Desktop directly. **No API key required.**
   ╚═╝     ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝      ╚═════╝ ╚══════╝       ╚═════╝╚══════╝╚═╝
 ```
 
+## Requirements
+
+- Node.js 18+
+- Figma Desktop (free account works)
+- macOS, Windows, or Linux
+
+## Installation
+
+### Option A: Download ZIP (Simple)
+
+Best for designers who want to try it once:
+
+1. Click the green **Code** button above
+2. Select **Download ZIP**
+3. Unzip the folder
+4. Open Terminal and navigate to the folder:
+
+```bash
+cd ~/Downloads/figma-cli-main
+npm install
+```
+
+### Option B: Git Clone (Always Latest)
+
+Best if you want automatic updates:
+
+```bash
+git clone https://github.com/silships/figma-cli.git
+cd figma-cli
+npm install
+```
+
+To update to the latest version anytime:
+
+```bash
+git pull
+npm install
+```
+
+## Quick Start
+
+**1. Connect to Figma**
+
+```bash
+node src/index.js connect
+```
+
+This starts Figma with remote debugging enabled.
+
+**2. Use with Claude Code**
+
+```bash
+claude
+```
+
+Then just ask:
+
+> "Create Tailwind colors"
+
+> "Add a card component"
+
+> "Export variables as CSS"
+
+The included `CLAUDE.md` teaches Claude all commands automatically.
+
+## How It Works
+
+Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed because it uses your existing Figma session.
+
+```
+┌─────────────┐      WebSocket (CDP)      ┌─────────────┐
+│ figma-ds-cli │ ◄───────────────────────► │   Figma     │
+│    (CLI)    │      localhost:9222       │  Desktop    │
+└─────────────┘                           └─────────────┘
+```
+
+---
+
 ## What It Can Do
 
 ### Design Tokens & Variables
@@ -169,51 +247,7 @@ CLI for controlling Figma Desktop directly. **No API key required.**
 - Version history
 - Team/project management
 
-## Quick Start
-
-**1. Download**
-
-```bash
-git clone https://github.com/silships/figma-cli.git
-cd figma-cli
-npm install
-```
-
-**2. Connect to Figma**
-
-```bash
-node src/index.js connect
-```
-
-**3. Use with Claude Code**
-
-```bash
-claude
-```
-
-Then just ask:
-> "Create Tailwind colors"
-> "Add a card component"
-> "Export variables as CSS"
-
-The included `CLAUDE.md` teaches Claude all commands.
-
-## How It Works
-
-Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed because it uses your existing Figma session.
-
-```
-┌─────────────┐      WebSocket (CDP)      ┌─────────────┐
-│ figma-ds-cli │ ◄───────────────────────► │   Figma     │
-│    (CLI)    │      localhost:9222       │  Desktop    │
-└─────────────┘                           └─────────────┘
-```
-
-## Requirements
-
-- Node.js 18+
-- Figma Desktop
-- macOS, Windows, or Linux
+---
 
 ## Author
 

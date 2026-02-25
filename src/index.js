@@ -778,6 +778,7 @@ program
     console.log(chalk.hex('#FF6B35')('  │  ') + chalk.hex('#4ECDC4').bold('Happy vibe coding!') + chalk.hex('#FF6B35')('                      │'));
     console.log(chalk.hex('#FF6B35')('  │                                             │'));
     console.log(chalk.hex('#FF6B35')('  │  ') + chalk.gray('Sil') + chalk.hex('#FF6B35')('                                          │'));
+    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.hex('#4ECDC4')('intodesignsystems.com') + chalk.hex('#FF6B35')('                    │'));
     console.log(chalk.hex('#FF6B35')('  ╰─────────────────────────────────────────────╯'));
     console.log();
   });

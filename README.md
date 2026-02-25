@@ -80,8 +80,9 @@ Best for designers who want to try it once:
 
 ```bash
 cd ~/Downloads/figma-cli-main
-npm install
 ```
+
+That's it! No `npm install` needed, dependencies are included.
 
 ### Option B: Git Clone (Always Latest)
 
@@ -90,14 +91,12 @@ Best if you want automatic updates:
 ```bash
 git clone https://github.com/silships/figma-cli.git
 cd figma-cli
-npm install
 ```
 
 To update to the latest version anytime:
 
 ```bash
 git pull
-npm install
 ```
 
 ## Quick Start

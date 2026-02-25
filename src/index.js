@@ -2043,23 +2043,95 @@ const { chromium } = require('playwright');
         return `{ r: ${r}, g: ${g}, b: ${b} }`;
       };
 
-      const getFontStyle = (weight) => {
-        if (weight >= 700) return 'Bold';
-        if (weight >= 600) return 'Semi Bold';  // Inter uses "Semi Bold" not "SemiBold"
-        if (weight >= 500) return 'Medium';
+      // Normalize font family name (Playwright returns lowercase)
+      const normalizeFontFamily = (family) => {
+        if (!family) return 'Inter';
+        const f = family.toLowerCase();
+        if (f.includes('inter')) return 'Inter';
+        if (f.includes('roboto')) return 'Roboto';
+        if (f.includes('arial')) return 'Arial';
+        if (f.includes('helvetica')) return 'Helvetica';
+        if (f.includes('georgia')) return 'Georgia';
+        if (f.includes('times')) return 'Times New Roman';
+        if (f.includes('verdana')) return 'Verdana';
+        if (f.includes('open sans')) return 'Open Sans';
+        if (f.includes('lato')) return 'Lato';
+        if (f.includes('montserrat')) return 'Montserrat';
+        if (f.includes('poppins')) return 'Poppins';
+        if (f.includes('source sans')) return 'Source Sans Pro';
+        // Capitalize first letter of each word
+        return family.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      };
+
+      // Get font style based on weight (handles different font naming conventions)
+      const getFontStyle = (weight, family) => {
+        const w = weight || 400;
+        const f = (family || '').toLowerCase();
+
+        // Inter uses "Semi Bold" with space
+        if (f.includes('inter')) {
+          if (w >= 700) return 'Bold';
+          if (w >= 600) return 'Semi Bold';
+          if (w >= 500) return 'Medium';
+          return 'Regular';
+        }
+
+        // Most other fonts use "SemiBold" without space
+        if (w >= 700) return 'Bold';
+        if (w >= 600) return 'SemiBold';
+        if (w >= 500) return 'Medium';
         return 'Regular';
       };
 
-      // Collect unique font styles needed
-      const fontStyles = new Set(['Regular']);
+      // Collect unique font family + style combinations
+      const fonts = new Set();
       data.elements.forEach(el => {
-        fontStyles.add(getFontStyle(el.fontWeight || 400));
+        const family = normalizeFontFamily(el.fontFamily);
+        const style = getFontStyle(el.fontWeight, el.fontFamily);
+        fonts.add(JSON.stringify({ family, style }));
       });
+      // Always include a fallback
+      fonts.add(JSON.stringify({ family: 'Inter', style: 'Regular' }));
 
       // Build Figma script
       let figmaCode = `(async function() {
-  // Load fonts
-${[...fontStyles].map(style => `  await figma.loadFontAsync({ family: "Inter", style: "${style}" });`).join('\n')}
+  // Font fallback map: requested font → available font
+  const fontMap = new Map();
+  const fallbackFont = { family: 'Inter', style: 'Regular' };
+
+  // Load font with fallback chain
+  const loadFont = async (family, style) => {
+    const key = family + '|' + style;
+
+    // Try exact match
+    try {
+      await figma.loadFontAsync({ family, style });
+      fontMap.set(key, { family, style });
+      return;
+    } catch {}
+
+    // Try Regular style
+    try {
+      await figma.loadFontAsync({ family, style: 'Regular' });
+      fontMap.set(key, { family, style: 'Regular' });
+      return;
+    } catch {}
+
+    // Fall back to Inter
+    await figma.loadFontAsync(fallbackFont);
+    fontMap.set(key, fallbackFont);
+  };
+
+  // Get available font (with fallback)
+  const getFont = (family, style) => {
+    const key = family + '|' + style;
+    return fontMap.get(key) || fallbackFont;
+  };
+
+${[...fonts].map(f => {
+  const { family, style } = JSON.parse(f);
+  return `  await loadFont("${family}", "${style}");`;
+}).join('\n')}
 
   // Smart positioning
   let smartX = 0;
@@ -2079,13 +2151,16 @@ ${[...fontStyles].map(style => `  await figma.loadFontAsync({ family: "Inter", s
 
       // Add elements
       data.elements.forEach((el, i) => {
+        const fontFamily = normalizeFontFamily(el.fontFamily);
+        const fontStyle = getFontStyle(el.fontWeight, el.fontFamily);
+
         if (el.type === 'heading' || el.type === 'text') {
           const text = (el.text || '').replace(/"/g, '\\"').replace(/\n/g, '\\n');
           if (!text) return;
           figmaCode += `
   // ${el.type}: ${text.slice(0, 30)}
   const t${i} = figma.createText();
-  t${i}.fontName = { family: "Inter", style: "${getFontStyle(el.fontWeight)}" };
+  t${i}.fontName = getFont("${fontFamily}", "${fontStyle}");
   t${i}.characters = "${text}";
   t${i}.fontSize = ${el.fontSize || 16};
   t${i}.fills = [{ type: "SOLID", color: ${hexToRgb(el.color)} }];
@@ -2110,7 +2185,7 @@ ${[...fontStyles].map(style => `  await figma.loadFontAsync({ family: "Inter", s
   btn${i}.primaryAxisAlignItems = "CENTER";
   btn${i}.counterAxisAlignItems = "CENTER";
   const btnTxt${i} = figma.createText();
-  btnTxt${i}.fontName = { family: "Inter", style: "${getFontStyle(el.fontWeight)}" };
+  btnTxt${i}.fontName = getFont("${fontFamily}", "${fontStyle}");
   btnTxt${i}.characters = "${text}";
   btnTxt${i}.fontSize = ${el.fontSize || 14};
   btnTxt${i}.fills = [{ type: "SOLID", color: ${hexToRgb(el.color)} }];
@@ -2133,7 +2208,7 @@ ${[...fontStyles].map(style => `  await figma.loadFontAsync({ family: "Inter", s
   input${i}.counterAxisAlignItems = "CENTER";
   input${i}.paddingLeft = ${el.paddingLeft || 12};
   const ph${i} = figma.createText();
-  ph${i}.fontName = { family: "Inter", style: "Regular" };
+  ph${i}.fontName = getFont("${fontFamily}", "Regular");
   ph${i}.characters = "${placeholder}";
   ph${i}.fontSize = ${el.fontSize || 14};
   ph${i}.fills = [{ type: "SOLID", color: { r: 0.6, g: 0.6, b: 0.6 } }];

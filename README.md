@@ -106,11 +106,62 @@ CLI for controlling Figma Desktop directly. **No API key required.**
 - **Select same size** nodes
 - **Color blindness simulation** (deuteranopia, protanopia, tritanopia)
 
+### Export & Convert
+
+- **Export to JSX** - Convert any Figma node to React JSX code
+- **Export to Storybook** - Generate Storybook stories from components
+- **Visual diff** - Compare two nodes and find differences
+- **Create diff patch** - Generate structural patches between versions
+
+### Query & Analysis
+
+- **XPath-like queries** - Find nodes with powerful selectors
+  - `//FRAME` - all frames
+  - `//TEXT[@fontSize > 20]` - text larger than 20px
+  - `//FRAME[contains(@name, 'Card')]` - frames with 'Card' in name
+- **Analyze colors** - Color usage frequency, variable bindings
+- **Analyze typography** - All font combinations used
+- **Analyze spacing** - Gap/padding values, grid compliance
+- **Find clusters** - Detect repeated patterns (potential components)
+
+### Vector Operations
+
+- Get vector path data
+- Set vector path data
+- Scale vectors
+- Flip nodes (horizontal/vertical)
+
+### Lint & Accessibility
+
+- **Design linting** with 8+ rules:
+  - `no-default-names` - Detect unnamed layers
+  - `no-deeply-nested` - Flag excessive nesting
+  - `no-empty-frames` - Find empty frames
+  - `prefer-auto-layout` - Suggest auto-layout
+  - `no-hardcoded-colors` - Check variable usage
+  - `color-contrast` - WCAG AA/AAA compliance
+  - `touch-target-size` - Minimum 44x44 check
+  - `min-text-size` - Minimum 12px text
+- **Accessibility snapshot** - Extract interactive elements tree
+
+### Component Variants
+
+- Create component sets with variants
+- Add variant properties
+- Combine frames into component sets
+
+### CSS Grid Layout
+
+- Set up grid layout with columns and rows
+- Configure column/row gaps
+- Auto-reorganize children into grid
+
 ### Advanced
 
 - Execute any Figma Plugin API code directly
 - Render complex UI from JSX-like syntax
 - Full programmatic control over Figma
+- Match vectors to Iconify icons
 
 ### Not Supported (requires REST API)
 

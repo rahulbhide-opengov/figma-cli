@@ -1662,6 +1662,944 @@ export class FigmaClient {
     `);
   }
 
+  // ============ Export to JSX ============
+
+  /**
+   * Export a node to JSX code
+   */
+  async exportToJSX(nodeId, options = {}) {
+    const { pretty = true } = options;
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        function rgbToHex(r, g, b) {
+          return '#' + [r, g, b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+        }
+
+        function nodeToJSX(n, indent = 0) {
+          const pad = ${pretty} ? '  '.repeat(indent) : '';
+          const nl = ${pretty} ? '\\n' : '';
+
+          let tag = 'Frame';
+          if (n.type === 'TEXT') tag = 'Text';
+          else if (n.type === 'RECTANGLE') tag = 'Rectangle';
+          else if (n.type === 'ELLIPSE') tag = 'Ellipse';
+          else if (n.type === 'LINE') tag = 'Line';
+          else if (n.type === 'VECTOR') tag = 'Vector';
+          else if (n.type === 'COMPONENT') tag = 'Component';
+          else if (n.type === 'INSTANCE') tag = 'Instance';
+
+          const props = [];
+          if (n.name) props.push('name="' + n.name + '"');
+          if (n.width) props.push('w={' + Math.round(n.width) + '}');
+          if (n.height) props.push('h={' + Math.round(n.height) + '}');
+
+          if (n.fills && n.fills.length > 0 && n.fills[0].type === 'SOLID') {
+            const c = n.fills[0].color;
+            props.push('bg="' + rgbToHex(c.r, c.g, c.b) + '"');
+          }
+
+          if (n.cornerRadius && n.cornerRadius > 0) {
+            props.push('rounded={' + n.cornerRadius + '}');
+          }
+
+          if (n.layoutMode === 'HORIZONTAL') props.push('flex="row"');
+          if (n.layoutMode === 'VERTICAL') props.push('flex="col"');
+          if (n.itemSpacing) props.push('gap={' + n.itemSpacing + '}');
+          if (n.paddingTop) props.push('p={' + n.paddingTop + '}');
+
+          if (n.type === 'TEXT') {
+            const fontSize = n.fontSize || 14;
+            props.push('size={' + fontSize + '}');
+            if (n.fontName && n.fontName.style) {
+              const weight = n.fontName.style.toLowerCase();
+              if (weight.includes('bold')) props.push('weight="bold"');
+              else if (weight.includes('medium')) props.push('weight="medium"');
+            }
+            if (n.fills && n.fills[0] && n.fills[0].type === 'SOLID') {
+              const c = n.fills[0].color;
+              props.push('color="' + rgbToHex(c.r, c.g, c.b) + '"');
+            }
+            return pad + '<Text ' + props.join(' ') + '>' + (n.characters || '') + '</Text>';
+          }
+
+          const hasChildren = n.children && n.children.length > 0;
+          const propsStr = props.length > 0 ? ' ' + props.join(' ') : '';
+
+          if (!hasChildren) {
+            return pad + '<' + tag + propsStr + ' />';
+          }
+
+          const childrenJSX = n.children.map(c => nodeToJSX(c, indent + 1)).join(nl);
+          return pad + '<' + tag + propsStr + '>' + nl + childrenJSX + nl + pad + '</' + tag + '>';
+        }
+
+        return { jsx: nodeToJSX(node) };
+      })()
+    `);
+  }
+
+  /**
+   * Export component to Storybook story
+   */
+  async exportToStorybook(nodeId) {
+    const jsxResult = await this.exportToJSX(nodeId);
+    if (jsxResult.error) return jsxResult;
+
+    const nodeInfo = await this.getNode(nodeId);
+    const componentName = (nodeInfo.name || 'Component').replace(/[^a-zA-Z0-9]/g, '');
+
+    const story = `import type { Meta, StoryObj } from '@storybook/react';
+
+// Auto-generated from Figma
+const ${componentName} = () => (
+${jsxResult.jsx.split('\n').map(l => '  ' + l).join('\n')}
+);
+
+const meta: Meta<typeof ${componentName}> = {
+  title: 'Components/${componentName}',
+  component: ${componentName},
+};
+
+export default meta;
+type Story = StoryObj<typeof ${componentName}>;
+
+export const Default: Story = {};
+`;
+
+    return { story, componentName };
+  }
+
+  // ============ Visual Diff ============
+
+  /**
+   * Compare two nodes visually (returns diff info)
+   */
+  async visualDiff(nodeId1, nodeId2) {
+    return await this.eval(`
+      (async function() {
+        const node1 = figma.getNodeById(${JSON.stringify(nodeId1)});
+        const node2 = figma.getNodeById(${JSON.stringify(nodeId2)});
+
+        if (!node1 || !node2) return { error: 'One or both nodes not found' };
+
+        const differences = [];
+
+        // Compare basic properties
+        if (node1.width !== node2.width || node1.height !== node2.height) {
+          differences.push({
+            property: 'size',
+            from: node1.width + 'x' + node1.height,
+            to: node2.width + 'x' + node2.height
+          });
+        }
+
+        if (JSON.stringify(node1.fills) !== JSON.stringify(node2.fills)) {
+          differences.push({ property: 'fills', changed: true });
+        }
+
+        if (JSON.stringify(node1.strokes) !== JSON.stringify(node2.strokes)) {
+          differences.push({ property: 'strokes', changed: true });
+        }
+
+        if (node1.cornerRadius !== node2.cornerRadius) {
+          differences.push({
+            property: 'cornerRadius',
+            from: node1.cornerRadius,
+            to: node2.cornerRadius
+          });
+        }
+
+        if (node1.opacity !== node2.opacity) {
+          differences.push({
+            property: 'opacity',
+            from: node1.opacity,
+            to: node2.opacity
+          });
+        }
+
+        // Compare children count
+        const children1 = node1.children ? node1.children.length : 0;
+        const children2 = node2.children ? node2.children.length : 0;
+        if (children1 !== children2) {
+          differences.push({
+            property: 'childCount',
+            from: children1,
+            to: children2
+          });
+        }
+
+        return {
+          node1: { id: node1.id, name: node1.name },
+          node2: { id: node2.id, name: node2.name },
+          identical: differences.length === 0,
+          differences
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Create a structural diff patch between two nodes
+   */
+  async createDiffPatch(fromId, toId) {
+    return await this.eval(`
+      (function() {
+        const from = figma.getNodeById(${JSON.stringify(fromId)});
+        const to = figma.getNodeById(${JSON.stringify(toId)});
+
+        if (!from || !to) return { error: 'Node not found' };
+
+        function getProps(n) {
+          return {
+            type: n.type,
+            name: n.name,
+            width: n.width,
+            height: n.height,
+            x: n.x,
+            y: n.y,
+            fills: n.fills,
+            strokes: n.strokes,
+            cornerRadius: n.cornerRadius,
+            opacity: n.opacity,
+            layoutMode: n.layoutMode,
+            itemSpacing: n.itemSpacing
+          };
+        }
+
+        const fromProps = getProps(from);
+        const toProps = getProps(to);
+        const patch = [];
+
+        for (const key in toProps) {
+          if (JSON.stringify(fromProps[key]) !== JSON.stringify(toProps[key])) {
+            patch.push({ property: key, from: fromProps[key], to: toProps[key] });
+          }
+        }
+
+        return { fromId: from.id, toId: to.id, patch };
+      })()
+    `);
+  }
+
+  // ============ XPath-like Query ============
+
+  /**
+   * Query nodes with XPath-like syntax
+   * Examples:
+   *   //FRAME - all frames
+   *   //TEXT[@fontSize > 20] - text larger than 20px
+   *   //FRAME[contains(@name, 'Card')] - frames with 'Card' in name
+   *   //*[@cornerRadius > 0] - any node with radius
+   */
+  async query(xpath) {
+    return await this.eval(`
+      (function() {
+        const xpath = ${JSON.stringify(xpath)};
+        const results = [];
+
+        // Parse simple XPath patterns
+        const typeMatch = xpath.match(/\\/\\/([A-Z_*]+)/);
+        const attrMatch = xpath.match(/@(\\w+)\\s*(=|>|<|>=|<=|!=)\\s*["']?([^"'\\]]+)["']?/);
+        const containsMatch = xpath.match(/contains\\(@(\\w+),\\s*["']([^"']+)["']\\)/);
+        const startsMatch = xpath.match(/starts-with\\(@(\\w+),\\s*["']([^"']+)["']\\)/);
+
+        const targetType = typeMatch ? typeMatch[1] : '*';
+
+        function matches(node) {
+          // Type check
+          if (targetType !== '*' && node.type !== targetType) return false;
+
+          // Attribute comparison
+          if (attrMatch) {
+            const [, attr, op, val] = attrMatch;
+            const nodeVal = node[attr];
+            const numVal = parseFloat(val);
+
+            if (op === '=' && nodeVal != val && nodeVal != numVal) return false;
+            if (op === '!=' && (nodeVal == val || nodeVal == numVal)) return false;
+            if (op === '>' && !(nodeVal > numVal)) return false;
+            if (op === '<' && !(nodeVal < numVal)) return false;
+            if (op === '>=' && !(nodeVal >= numVal)) return false;
+            if (op === '<=' && !(nodeVal <= numVal)) return false;
+          }
+
+          // contains()
+          if (containsMatch) {
+            const [, attr, val] = containsMatch;
+            if (!node[attr] || !String(node[attr]).includes(val)) return false;
+          }
+
+          // starts-with()
+          if (startsMatch) {
+            const [, attr, val] = startsMatch;
+            if (!node[attr] || !String(node[attr]).startsWith(val)) return false;
+          }
+
+          return true;
+        }
+
+        function search(node) {
+          if (matches(node)) {
+            results.push({
+              id: node.id,
+              type: node.type,
+              name: node.name || '',
+              x: Math.round(node.x || 0),
+              y: Math.round(node.y || 0),
+              width: Math.round(node.width || 0),
+              height: Math.round(node.height || 0)
+            });
+          }
+          if (node.children) node.children.forEach(search);
+        }
+
+        search(figma.currentPage);
+        return results.slice(0, 200);
+      })()
+    `);
+  }
+
+  // ============ Path/Vector Operations ============
+
+  /**
+   * Get vector path data from a node
+   */
+  async getPath(nodeId) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+        if (!node.vectorPaths) return { error: 'Node has no vector paths' };
+
+        return {
+          id: node.id,
+          name: node.name,
+          paths: node.vectorPaths.map(p => ({
+            data: p.data,
+            windingRule: p.windingRule
+          }))
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Set vector path data on a node
+   */
+  async setPath(nodeId, pathData) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+        if (node.type !== 'VECTOR') return { error: 'Node is not a vector' };
+
+        node.vectorPaths = [{ data: ${JSON.stringify(pathData)}, windingRule: 'EVENODD' }];
+        return { success: true };
+      })()
+    `);
+  }
+
+  /**
+   * Scale a vector path
+   */
+  async scalePath(nodeId, factor) {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        node.rescale(${factor});
+        return { success: true, newWidth: node.width, newHeight: node.height };
+      })()
+    `);
+  }
+
+  /**
+   * Flip a node horizontally or vertically
+   */
+  async flipNode(nodeId, axis = 'x') {
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        if (${JSON.stringify(axis)} === 'x') {
+          // Flip horizontally
+          const transform = node.relativeTransform;
+          node.relativeTransform = [
+            [-transform[0][0], transform[0][1], transform[0][2] + node.width],
+            [transform[1][0], transform[1][1], transform[1][2]]
+          ];
+        } else {
+          // Flip vertically
+          const transform = node.relativeTransform;
+          node.relativeTransform = [
+            [transform[0][0], transform[0][1], transform[0][2]],
+            [transform[1][0], -transform[1][1], transform[1][2] + node.height]
+          ];
+        }
+
+        return { success: true, axis: ${JSON.stringify(axis)} };
+      })()
+    `);
+  }
+
+  // ============ Analyze ============
+
+  /**
+   * Analyze colors used in the design
+   */
+  async analyzeColors() {
+    return await this.eval(`
+      (function() {
+        const colorMap = new Map();
+
+        function rgbToHex(r, g, b) {
+          return '#' + [r, g, b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+        }
+
+        function processNode(node) {
+          // Check fills
+          if (node.fills && Array.isArray(node.fills)) {
+            node.fills.forEach(fill => {
+              if (fill.type === 'SOLID' && fill.visible !== false) {
+                const hex = rgbToHex(fill.color.r, fill.color.g, fill.color.b);
+                const existing = colorMap.get(hex) || { count: 0, nodes: [], hasVariable: false };
+                existing.count++;
+                if (existing.nodes.length < 5) existing.nodes.push(node.id);
+
+                // Check if bound to variable
+                if (node.boundVariables && node.boundVariables.fills) {
+                  existing.hasVariable = true;
+                }
+                colorMap.set(hex, existing);
+              }
+            });
+          }
+
+          // Check strokes
+          if (node.strokes && Array.isArray(node.strokes)) {
+            node.strokes.forEach(stroke => {
+              if (stroke.type === 'SOLID' && stroke.visible !== false) {
+                const hex = rgbToHex(stroke.color.r, stroke.color.g, stroke.color.b);
+                const existing = colorMap.get(hex) || { count: 0, nodes: [], hasVariable: false };
+                existing.count++;
+                if (existing.nodes.length < 5) existing.nodes.push(node.id);
+                colorMap.set(hex, existing);
+              }
+            });
+          }
+
+          if (node.children) node.children.forEach(processNode);
+        }
+
+        processNode(figma.currentPage);
+
+        const colors = Array.from(colorMap.entries())
+          .map(([hex, data]) => ({ hex, ...data }))
+          .sort((a, b) => b.count - a.count);
+
+        return {
+          totalColors: colors.length,
+          colors: colors.slice(0, 50)
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Analyze typography used in the design
+   */
+  async analyzeTypography() {
+    return await this.eval(`
+      (function() {
+        const fontMap = new Map();
+
+        function processNode(node) {
+          if (node.type === 'TEXT') {
+            const key = node.fontName.family + '/' + node.fontName.style + '/' + node.fontSize;
+            const existing = fontMap.get(key) || { count: 0, nodes: [] };
+            existing.count++;
+            existing.family = node.fontName.family;
+            existing.style = node.fontName.style;
+            existing.size = node.fontSize;
+            if (existing.nodes.length < 5) existing.nodes.push(node.id);
+            fontMap.set(key, existing);
+          }
+          if (node.children) node.children.forEach(processNode);
+        }
+
+        processNode(figma.currentPage);
+
+        const fonts = Array.from(fontMap.values())
+          .sort((a, b) => b.count - a.count);
+
+        return {
+          totalStyles: fonts.length,
+          fonts: fonts.slice(0, 30)
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Analyze spacing (gaps and padding) used in the design
+   */
+  async analyzeSpacing(gridBase = 8) {
+    return await this.eval(`
+      (function() {
+        const spacingMap = new Map();
+        const gridBase = ${gridBase};
+
+        function processNode(node) {
+          if (node.layoutMode) {
+            // Gap
+            if (node.itemSpacing !== undefined) {
+              const key = 'gap:' + node.itemSpacing;
+              const existing = spacingMap.get(key) || { value: node.itemSpacing, type: 'gap', count: 0, onGrid: node.itemSpacing % gridBase === 0 };
+              existing.count++;
+              spacingMap.set(key, existing);
+            }
+
+            // Padding
+            const paddings = [node.paddingTop, node.paddingRight, node.paddingBottom, node.paddingLeft].filter(p => p > 0);
+            paddings.forEach(p => {
+              const key = 'padding:' + p;
+              const existing = spacingMap.get(key) || { value: p, type: 'padding', count: 0, onGrid: p % gridBase === 0 };
+              existing.count++;
+              spacingMap.set(key, existing);
+            });
+          }
+
+          if (node.children) node.children.forEach(processNode);
+        }
+
+        processNode(figma.currentPage);
+
+        const spacing = Array.from(spacingMap.values())
+          .sort((a, b) => b.count - a.count);
+
+        const offGrid = spacing.filter(s => !s.onGrid);
+
+        return {
+          gridBase,
+          totalValues: spacing.length,
+          offGridCount: offGrid.length,
+          spacing: spacing.slice(0, 30),
+          offGrid: offGrid.slice(0, 10)
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Find repeated patterns (potential components)
+   */
+  async analyzeClusters() {
+    return await this.eval(`
+      (function() {
+        const patterns = new Map();
+
+        function getSignature(node) {
+          if (!node.children) return node.type;
+
+          const childTypes = node.children.map(c => c.type).sort().join(',');
+          return node.type + '[' + childTypes + ']' + node.width + 'x' + node.height;
+        }
+
+        function processNode(node) {
+          if (node.type === 'FRAME' && node.children && node.children.length > 0) {
+            const sig = getSignature(node);
+            const existing = patterns.get(sig) || { signature: sig, count: 0, examples: [] };
+            existing.count++;
+            if (existing.examples.length < 5) {
+              existing.examples.push({ id: node.id, name: node.name });
+            }
+            patterns.set(sig, existing);
+          }
+          if (node.children) node.children.forEach(processNode);
+        }
+
+        processNode(figma.currentPage);
+
+        const clusters = Array.from(patterns.values())
+          .filter(p => p.count >= 2)
+          .sort((a, b) => b.count - a.count);
+
+        return {
+          potentialComponents: clusters.length,
+          clusters: clusters.slice(0, 20)
+        };
+      })()
+    `);
+  }
+
+  // ============ Lint ============
+
+  /**
+   * Lint the design for common issues
+   */
+  async lint(options = {}) {
+    const { preset = 'recommended' } = options;
+    return await this.eval(`
+      (function() {
+        const issues = [];
+        const preset = ${JSON.stringify(preset)};
+
+        function rgbToHex(r, g, b) {
+          return '#' + [r, g, b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+        }
+
+        function getLuminance(r, g, b) {
+          const [rs, gs, bs] = [r, g, b].map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+          return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+        }
+
+        function getContrastRatio(c1, c2) {
+          const l1 = getLuminance(c1.r, c1.g, c1.b);
+          const l2 = getLuminance(c2.r, c2.g, c2.b);
+          return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+        }
+
+        function checkNode(node, depth = 0) {
+          // No default names
+          if (node.name && (node.name.startsWith('Frame ') || node.name.startsWith('Rectangle ') || node.name.startsWith('Group '))) {
+            issues.push({
+              nodeId: node.id,
+              nodeName: node.name,
+              rule: 'no-default-names',
+              severity: 'warning',
+              message: 'Layer has default name'
+            });
+          }
+
+          // Deeply nested
+          if (depth > 10) {
+            issues.push({
+              nodeId: node.id,
+              nodeName: node.name,
+              rule: 'no-deeply-nested',
+              severity: 'warning',
+              message: 'Node is nested too deeply (' + depth + ' levels)'
+            });
+          }
+
+          // Empty frames
+          if (node.type === 'FRAME' && (!node.children || node.children.length === 0)) {
+            issues.push({
+              nodeId: node.id,
+              nodeName: node.name,
+              rule: 'no-empty-frames',
+              severity: 'info',
+              message: 'Frame is empty'
+            });
+          }
+
+          // Prefer auto-layout
+          if (node.type === 'FRAME' && node.children && node.children.length > 2 && !node.layoutMode) {
+            issues.push({
+              nodeId: node.id,
+              nodeName: node.name,
+              rule: 'prefer-auto-layout',
+              severity: 'info',
+              message: 'Frame with ' + node.children.length + ' children doesn\\'t use Auto Layout'
+            });
+          }
+
+          // Hardcoded colors (not bound to variables)
+          if (node.fills && node.fills.length > 0 && node.fills[0].type === 'SOLID') {
+            if (!node.boundVariables || !node.boundVariables.fills) {
+              issues.push({
+                nodeId: node.id,
+                nodeName: node.name,
+                rule: 'no-hardcoded-colors',
+                severity: 'warning',
+                message: 'Fill color is not bound to a variable'
+              });
+            }
+          }
+
+          // Text contrast check
+          if (node.type === 'TEXT' && node.fills && node.fills[0] && node.fills[0].type === 'SOLID') {
+            let parent = node.parent;
+            let bgColor = null;
+            while (parent && !bgColor) {
+              if (parent.fills && parent.fills.length > 0 && parent.fills[0].type === 'SOLID') {
+                bgColor = parent.fills[0].color;
+              }
+              parent = parent.parent;
+            }
+            if (bgColor) {
+              const textColor = node.fills[0].color;
+              const ratio = getContrastRatio(textColor, bgColor);
+              if (ratio < 4.5) {
+                issues.push({
+                  nodeId: node.id,
+                  nodeName: node.name,
+                  rule: 'color-contrast',
+                  severity: 'error',
+                  message: 'Contrast ratio ' + ratio.toFixed(1) + ':1 is below AA threshold (4.5:1)'
+                });
+              }
+            }
+          }
+
+          // Touch target size
+          if ((node.type === 'FRAME' || node.type === 'INSTANCE') && node.name && (node.name.toLowerCase().includes('button') || node.name.toLowerCase().includes('link'))) {
+            if (node.width < 44 || node.height < 44) {
+              issues.push({
+                nodeId: node.id,
+                nodeName: node.name,
+                rule: 'touch-target-size',
+                severity: 'warning',
+                message: 'Touch target ' + Math.round(node.width) + 'x' + Math.round(node.height) + ' is below minimum 44x44'
+              });
+            }
+          }
+
+          // Min text size
+          if (node.type === 'TEXT' && node.fontSize < 12) {
+            issues.push({
+              nodeId: node.id,
+              nodeName: node.name,
+              rule: 'min-text-size',
+              severity: 'warning',
+              message: 'Text size ' + node.fontSize + 'px is below minimum 12px'
+            });
+          }
+
+          if (node.children) node.children.forEach(c => checkNode(c, depth + 1));
+        }
+
+        checkNode(figma.currentPage);
+
+        const errors = issues.filter(i => i.severity === 'error').length;
+        const warnings = issues.filter(i => i.severity === 'warning').length;
+        const infos = issues.filter(i => i.severity === 'info').length;
+
+        return {
+          preset,
+          errors,
+          warnings,
+          infos,
+          total: issues.length,
+          issues: issues.slice(0, 100)
+        };
+      })()
+    `);
+  }
+
+  // ============ Component Variants ============
+
+  /**
+   * Create a component set with variants
+   */
+  async createComponentSet(name, variants) {
+    // variants = [{ props: { variant: 'Primary', size: 'Large' }, nodeId: '1:23' }, ...]
+    return await this.eval(`
+      (async function() {
+        const name = ${JSON.stringify(name)};
+        const variants = ${JSON.stringify(variants)};
+
+        // Convert each node to component
+        const components = [];
+        for (const v of variants) {
+          const node = figma.getNodeById(v.nodeId);
+          if (!node) continue;
+
+          // Create component from node
+          const component = figma.createComponentFromNode(node);
+
+          // Set name with variant properties
+          const propStr = Object.entries(v.props).map(([k, val]) => k + '=' + val).join(', ');
+          component.name = propStr;
+
+          components.push(component);
+        }
+
+        if (components.length === 0) return { error: 'No valid nodes found' };
+
+        // Combine into component set
+        const componentSet = figma.combineAsVariants(components, figma.currentPage);
+        componentSet.name = name;
+
+        return {
+          id: componentSet.id,
+          name: componentSet.name,
+          variantCount: components.length
+        };
+      })()
+    `);
+  }
+
+  /**
+   * Add variant properties to existing component
+   */
+  async addVariantProperty(componentSetId, propertyName, values) {
+    return await this.eval(`
+      (function() {
+        const componentSet = figma.getNodeById(${JSON.stringify(componentSetId)});
+        if (!componentSet || componentSet.type !== 'COMPONENT_SET') {
+          return { error: 'Component set not found' };
+        }
+
+        // Add property definition
+        const propDefs = componentSet.componentPropertyDefinitions;
+        propDefs[${JSON.stringify(propertyName)}] = {
+          type: 'VARIANT',
+          defaultValue: ${JSON.stringify(values[0])},
+          variantOptions: ${JSON.stringify(values)}
+        };
+
+        return { success: true, property: ${JSON.stringify(propertyName)}, values: ${JSON.stringify(values)} };
+      })()
+    `);
+  }
+
+  // ============ CSS Grid Layout ============
+
+  /**
+   * Set CSS Grid layout on a frame
+   */
+  async setGridLayout(nodeId, options = {}) {
+    const { cols = '1fr 1fr', rows = 'auto', gap = 16, colGap, rowGap } = options;
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node || node.type !== 'FRAME') return { error: 'Frame not found' };
+
+        // Parse columns
+        const cols = ${JSON.stringify(cols)}.split(' ');
+        const rows = ${JSON.stringify(rows)}.split(' ');
+
+        // Figma doesn't have native CSS Grid, so we simulate with auto-layout
+        // For true grid, we create nested frames
+
+        node.layoutMode = 'VERTICAL';
+        node.itemSpacing = ${rowGap || gap};
+        node.primaryAxisSizingMode = 'AUTO';
+        node.counterAxisSizingMode = 'FIXED';
+
+        // If children exist, reorganize into rows
+        const children = [...node.children];
+        const colCount = cols.length;
+
+        // Remove all children first
+        children.forEach(c => c.remove());
+
+        // Create rows
+        let childIndex = 0;
+        while (childIndex < children.length) {
+          const rowFrame = figma.createFrame();
+          rowFrame.name = 'Row';
+          rowFrame.layoutMode = 'HORIZONTAL';
+          rowFrame.itemSpacing = ${colGap || gap};
+          rowFrame.primaryAxisSizingMode = 'AUTO';
+          rowFrame.counterAxisSizingMode = 'AUTO';
+          rowFrame.fills = [];
+
+          for (let i = 0; i < colCount && childIndex < children.length; i++) {
+            rowFrame.appendChild(children[childIndex]);
+            children[childIndex].layoutSizingHorizontal = 'FILL';
+            childIndex++;
+          }
+
+          node.appendChild(rowFrame);
+        }
+
+        return { success: true, cols: colCount, childrenReorganized: children.length };
+      })()
+    `);
+  }
+
+  // ============ Accessibility Snapshot ============
+
+  /**
+   * Get accessibility tree snapshot
+   */
+  async getAccessibilitySnapshot(nodeId = null) {
+    return await this.eval(`
+      (function() {
+        const root = ${nodeId ? `figma.getNodeById(${JSON.stringify(nodeId)})` : 'figma.currentPage'};
+        if (!root) return { error: 'Node not found' };
+
+        const elements = [];
+
+        function processNode(node, depth = 0) {
+          const isInteractive = node.name && (
+            node.name.toLowerCase().includes('button') ||
+            node.name.toLowerCase().includes('link') ||
+            node.name.toLowerCase().includes('input') ||
+            node.name.toLowerCase().includes('checkbox') ||
+            node.name.toLowerCase().includes('toggle') ||
+            node.type === 'INSTANCE'
+          );
+
+          const isText = node.type === 'TEXT';
+
+          if (isInteractive || isText) {
+            elements.push({
+              id: node.id,
+              type: node.type,
+              name: node.name,
+              role: isInteractive ? 'interactive' : 'text',
+              depth,
+              width: Math.round(node.width || 0),
+              height: Math.round(node.height || 0),
+              text: node.characters || null
+            });
+          }
+
+          if (node.children) {
+            node.children.forEach(c => processNode(c, depth + 1));
+          }
+        }
+
+        processNode(root);
+
+        return {
+          totalElements: elements.length,
+          interactive: elements.filter(e => e.role === 'interactive').length,
+          textElements: elements.filter(e => e.role === 'text').length,
+          elements: elements.slice(0, 100)
+        };
+      })()
+    `);
+  }
+
+  // ============ Match Icons ============
+
+  /**
+   * Try to match a vector node to an Iconify icon
+   */
+  async matchIcon(nodeId, preferredSets = ['lucide', 'mdi']) {
+    // Get the SVG export of the node
+    const svgResult = await this.exportSVG(nodeId);
+    if (svgResult.error) return svgResult;
+
+    // This would require an external service to match
+    // For now, return info about the vector
+    return await this.eval(`
+      (function() {
+        const node = figma.getNodeById(${JSON.stringify(nodeId)});
+        if (!node) return { error: 'Node not found' };
+
+        return {
+          id: node.id,
+          name: node.name,
+          type: node.type,
+          width: node.width,
+          height: node.height,
+          suggestion: 'Use Iconify search to find matching icon: https://icon-sets.iconify.design/',
+          preferredSets: ${JSON.stringify(preferredSets)}
+        };
+      })()
+    `);
+  }
+
   close() {
     if (this.ws) {
       this.ws.close();

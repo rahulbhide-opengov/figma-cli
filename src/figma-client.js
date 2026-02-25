@@ -403,18 +403,23 @@ export class FigmaClient {
         } else if (item._type === 'frame') {
           // Nested frame (button, etc.)
           const fName = item.name || 'Nested Frame';
-          const fWidth = item.w || item.width || 100;
-          const fHeight = item.h || item.height || 40;
           const fBg = item.bg || item.fill || '#ffffff';
           const fStroke = item.stroke || null;
-          const fRounded = item.rounded || item.radius || 0;
+          const fRounded = item.rounded || item.radius || 8;
           const fFlex = item.flex || 'row';
           const fGap = item.gap || 0;
-          const fP = item.p || item.padding || 0;
-          const fPx = item.px || fP;
-          const fPy = item.py || fP;
+          // Default padding for buttons
+          const fP = item.p !== undefined ? item.p : (item.padding !== undefined ? item.padding : null);
+          const fPx = item.px !== undefined ? item.px : (fP !== null ? fP : 16);
+          const fPy = item.py !== undefined ? item.py : (fP !== null ? fP : 10);
           const fAlign = item.align || 'center';
           const fJustify = item.justify || 'center';
+
+          // HUG by default, FIXED only if explicit size given
+          const hasWidth = item.w !== undefined || item.width !== undefined;
+          const hasHeight = item.h !== undefined || item.height !== undefined;
+          const fWidth = item.w || item.width || 100;
+          const fHeight = item.h || item.height || 40;
 
           // Map align/justify to Figma values
           const alignMap = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH' };
@@ -426,20 +431,20 @@ export class FigmaClient {
           return `
         const el${idx} = figma.createFrame();
         el${idx}.name = ${JSON.stringify(fName)};
-        el${idx}.resize(${fWidth}, ${fHeight});
-        el${idx}.cornerRadius = ${fRounded};
-        el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(fBg)}}];
-        ${fStroke ? `el${idx}.strokes = [{type:'SOLID',color:${this.hexToRgbCode(fStroke)}}]; el${idx}.strokeWeight = 1;` : ''}
         el${idx}.layoutMode = '${fFlex === 'row' ? 'HORIZONTAL' : 'VERTICAL'}';
+        el${idx}.primaryAxisSizingMode = '${hasWidth ? 'FIXED' : 'AUTO'}';
+        el${idx}.counterAxisSizingMode = '${hasHeight ? 'FIXED' : 'AUTO'}';
+        ${hasWidth || hasHeight ? `el${idx}.resize(${fWidth}, ${fHeight});` : ''}
         el${idx}.itemSpacing = ${fGap};
         el${idx}.paddingTop = ${fPy};
         el${idx}.paddingBottom = ${fPy};
         el${idx}.paddingLeft = ${fPx};
         el${idx}.paddingRight = ${fPx};
+        el${idx}.cornerRadius = ${fRounded};
+        el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(fBg)}}];
+        ${fStroke ? `el${idx}.strokes = [{type:'SOLID',color:${this.hexToRgbCode(fStroke)}}]; el${idx}.strokeWeight = 1;` : ''}
         el${idx}.primaryAxisAlignItems = '${fJustifyVal}';
         el${idx}.counterAxisAlignItems = '${fAlignVal}';
-        el${idx}.primaryAxisSizingMode = 'FIXED';
-        el${idx}.counterAxisSizingMode = 'FIXED';
         ${parentVar}.appendChild(el${idx});
         ${nestedChildren}`;
         }

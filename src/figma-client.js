@@ -300,8 +300,8 @@ export class FigmaClient {
       .map(s => `figma.loadFontAsync({family:'Inter',style:'${s}'})`)
       .join(',');
 
-    // Build text creation - IMPORTANT: appendChild first, then set properties
-    // This ensures text is inside frame before any layout calculations
+    // Build text creation
+    // Order: create → set font → set content → appendChild → set layout properties
     const textCode = textElements.map((t, i) => {
       const weight = t.weight || 'regular';
       const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
@@ -311,11 +311,11 @@ export class FigmaClient {
 
       return `
         const text${i} = figma.createText();
-        frame.appendChild(text${i});
         text${i}.fontName = {family:'Inter',style:'${style}'};
         text${i}.fontSize = ${size};
         text${i}.characters = ${JSON.stringify(t.content)};
         text${i}.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
+        frame.appendChild(text${i});
         ${fillWidth ? `text${i}.layoutSizingHorizontal = 'FILL'; text${i}.textAutoResize = 'HEIGHT';` : ''}
       `;
     }).join('\n');

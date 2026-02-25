@@ -133,6 +133,14 @@ node src/index.js create group "Header"
 node src/index.js create component "Button"
 ```
 
+"Render a card with JSX (RECOMMENDED for complex designs)"
+```bash
+node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={16} flex="col" gap={8} p={24}>
+  <Text size={20} weight="bold" color="#111">Title</Text>
+  <Text size={14} color="#666" w="fill">Description</Text>
+</Frame>'
+```
+
 ### Modify Elements
 
 "Change fill color"
@@ -444,11 +452,39 @@ node src/index.js fj eval "
 
 ## Creating Designs Best Practices
 
+### IMPORTANT: Use `render` Command for Complex Designs
+
+When creating frames with text inside, **always use the `render` command** instead of `eval`:
+
+```bash
+# CORRECT: Use render with JSX syntax
+node src/index.js render '<Frame name="Card" w={320} h={180} bg="#fff" rounded={16} flex="col" gap={8} p={24}>
+  <Text size={12} weight="medium" color="#1e3a8a">Tag</Text>
+  <Text size={20} weight="bold" color="#1e3a8a">Title</Text>
+  <Text size={14} color="#64748b" w="fill">Description text here</Text>
+</Frame>'
+```
+
+**Why?** The `eval` command with async functions has issues with font loading and appendChild timing. The `render` command handles fonts and nesting correctly.
+
+### Render Command Reference
+
+```bash
+# Frame with auto-layout
+<Frame name="Name" w={320} h={180} bg="#color" rounded={16} flex="col" gap={8} p={24}>
+
+# Text with fill width (prevents overflow)
+<Text size={14} color="#color" w="fill">Content</Text>
+
+# Position on canvas
+<Frame x={1000} y={0} ...>
+```
+
 ### IMPORTANT: Create Elements INSIDE Frames
 
 When user says "create a design":
-1. **Create a Frame** with Auto-Layout as container
-2. **All elements INSIDE** the frame using `frame.appendChild(element)`
+1. **Use the `render` command** with JSX for frames with text
+2. **All elements INSIDE** the frame automatically with JSX nesting
 3. **Never loose elements** directly on canvas
 
 ```javascript
@@ -572,7 +608,7 @@ Without these settings, text will overflow frame boundaries!
 })()
 ```
 
-### Weitere Best Practices
+### Additional Best Practices
 
 1. **Always check available variables and components first** before creating designs:
    ```bash

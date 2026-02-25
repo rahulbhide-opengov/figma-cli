@@ -2,6 +2,22 @@
 
 CLI that controls Figma Desktop directly. No API key needed.
 
+## After Setup: Show Designer-Friendly Examples
+
+When setup is complete, show these natural language examples (NOT CLI commands):
+
+```
+Ready! Try asking:
+
+"Create a blue rectangle"
+"Add Tailwind colors to my file"
+"Create a card with title and description"
+"Show me what's on the canvas"
+"Find all frames named Button"
+```
+
+IMPORTANT: Never show `node src/index.js` commands to designers. They just type natural language and you execute the right commands.
+
 ## Setup
 
 Figma must be running. Then:

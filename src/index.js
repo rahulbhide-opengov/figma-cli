@@ -435,12 +435,13 @@ program.action(async () => {
       } catch (error) {
         spinner.fail('Patch failed: ' + error.message);
         if (error.message.includes('EPERM') || error.message.includes('permission')) {
-          console.log(chalk.yellow('\n  Troubleshooting:'));
-          console.log(chalk.gray('  1. Make sure Figma is completely closed (check Activity Monitor)'));
-          console.log(chalk.gray('  2. On macOS, try: sudo node src/index.js init'));
-          console.log(chalk.gray('  3. If still failing, grant Terminal "Full Disk Access":'));
+          console.log(chalk.yellow('\n  Troubleshooting (macOS):'));
+          console.log(chalk.gray('  1. Grant Terminal "Full Disk Access" (required!):'));
           console.log(chalk.gray('     System Settings → Privacy & Security → Full Disk Access → Add Terminal'));
-          console.log(chalk.gray('  4. Or manually patch: See README.md troubleshooting section\n'));
+          console.log(chalk.gray('  2. Restart Terminal completely (quit and reopen)'));
+          console.log(chalk.gray('  3. Make sure Figma is closed: killall Figma'));
+          console.log(chalk.gray('  4. Run again: node src/index.js init'));
+          console.log(chalk.gray('  See README.md for manual patch instructions\n'));
         }
       }
     }
@@ -594,12 +595,13 @@ program
       } catch (error) {
         spinner.fail('Patch failed: ' + error.message);
         if (error.message.includes('EPERM') || error.message.includes('permission')) {
-          console.log(chalk.yellow('\n  Troubleshooting:'));
-          console.log(chalk.gray('  1. Make sure Figma is completely closed (check Activity Monitor)'));
-          console.log(chalk.gray('  2. On macOS, try: sudo node src/index.js init'));
-          console.log(chalk.gray('  3. If still failing, grant Terminal "Full Disk Access":'));
+          console.log(chalk.yellow('\n  Troubleshooting (macOS):'));
+          console.log(chalk.gray('  1. Grant Terminal "Full Disk Access" (required!):'));
           console.log(chalk.gray('     System Settings → Privacy & Security → Full Disk Access → Add Terminal'));
-          console.log(chalk.gray('  4. Or manually patch: See README.md troubleshooting section\n'));
+          console.log(chalk.gray('  2. Restart Terminal completely (quit and reopen)'));
+          console.log(chalk.gray('  3. Make sure Figma is closed: killall Figma'));
+          console.log(chalk.gray('  4. Run again: node src/index.js init'));
+          console.log(chalk.gray('  See README.md for manual patch instructions\n'));
         }
       }
     }

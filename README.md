@@ -144,7 +144,16 @@ Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed 
 
 If you see `EPERM: operation not permitted, open '.../app.asar'`:
 
-**1. Make sure Figma is completely closed**
+**1. Grant Full Disk Access to Terminal**
+
+macOS blocks file access without this permission, even with sudo.
+
+1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+2. Click the **+** button
+3. Add **Terminal** (or iTerm, VS Code, Warp, etc.)
+4. **Restart Terminal completely** (quit and reopen)
+
+**2. Make sure Figma is completely closed**
 ```bash
 # Check if Figma is still running
 ps aux | grep -i figma
@@ -153,19 +162,12 @@ ps aux | grep -i figma
 killall Figma
 ```
 
-**2. Try with sudo**
+**3. Run init again**
 ```bash
-sudo node src/index.js init
+node src/index.js init
 ```
 
-**3. If sudo doesn't work, grant Full Disk Access to Terminal**
-
-macOS may block access even with sudo. To fix:
-
-1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
-2. Click the **+** button
-3. Add **Terminal** (or iTerm, VS Code, etc.)
-4. Restart Terminal and try again
+If still failing, try with sudo: `sudo node src/index.js init`
 
 **4. Manual patch (last resort)**
 

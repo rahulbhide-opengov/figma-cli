@@ -616,11 +616,13 @@ node src/index.js export screenshot -o screenshot.png
 
 "Export node as JSX/React code"
 ```bash
-node src/index.js export-jsx "1:234"
-node src/index.js export-jsx "1:234" -o component.jsx
+node src/index.js export-jsx "1:234"              # Output to stdout
+node src/index.js export-jsx "1:234" --pretty     # Formatted output
+node src/index.js export-jsx "1:234" -o Card.jsx  # Save to file
+node src/index.js export-jsx --match-icons        # Match vectors to Iconify
 ```
 
-"Export node as Storybook story"
+"Export components as Storybook stories"
 ```bash
 node src/index.js export-storybook "1:234"
 node src/index.js export-storybook "1:234" -o Button.stories.jsx
@@ -630,10 +632,14 @@ node src/index.js export-storybook "1:234" -o Button.stories.jsx
 
 "Lint design for issues"
 ```bash
-node src/index.js lint              # Check all rules
-node src/index.js lint --fix        # Auto-fix issues
-node src/index.js lint --rules color-contrast,touch-target-size
+node src/index.js lint                          # Check all rules
+node src/index.js lint --fix                    # Auto-fix issues
+node src/index.js lint --rule color-contrast    # Specific rule
+node src/index.js lint --preset accessibility   # Use preset
+node src/index.js lint --json                   # JSON output
 ```
+
+Available presets: `recommended`, `strict`, `accessibility`, `design-system`
 
 Available lint rules:
 - `no-default-names` - detect unnamed layers

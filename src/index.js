@@ -3577,12 +3577,16 @@ program
   .command('lint')
   .description('Lint design for issues (figma-use)')
   .option('--fix', 'Auto-fix issues where possible')
-  .option('--rules <rules>', 'Comma-separated rules to check')
+  .option('--rule <rule>', 'Run specific rule (can be repeated)', (val, prev) => prev ? [...prev, val] : [val])
+  .option('--preset <preset>', 'Preset: recommended, strict, accessibility, design-system')
+  .option('--json', 'Output as JSON')
   .action((options) => {
     checkConnection();
     let cmd = 'npx figma-use lint';
     if (options.fix) cmd += ' --fix';
-    if (options.rules) cmd += ` --rules ${options.rules}`;
+    if (options.rule) options.rule.forEach(r => cmd += ` --rule ${r}`);
+    if (options.preset) cmd += ` --preset ${options.preset}`;
+    if (options.json) cmd += ' --json';
     try {
       execSync(cmd, { stdio: 'inherit', timeout: 60000 });
     } catch (error) {
@@ -3690,25 +3694,37 @@ node
 program
   .command('export-jsx [nodeId]')
   .description('Export node as JSX/React code')
-  .option('-o, --output <file>', 'Output file')
+  .option('-o, --output <file>', 'Output file (otherwise stdout)')
+  .option('--pretty', 'Format output')
+  .option('--match-icons', 'Match vectors to Iconify icons')
   .action((nodeId, options) => {
     checkConnection();
     let cmd = 'npx figma-use export jsx';
     if (nodeId) cmd += ` "${nodeId}"`;
-    if (options.output) cmd += ` -o "${options.output}"`;
-    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+    if (options.pretty) cmd += ' --pretty';
+    if (options.matchIcons) cmd += ' --match-icons';
+    if (options.output) {
+      cmd += ` > "${options.output}"`;
+      execSync(cmd, { shell: true, stdio: 'inherit', timeout: 60000 });
+    } else {
+      execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+    }
   });
 
 program
   .command('export-storybook [nodeId]')
-  .description('Export node as Storybook story')
-  .option('-o, --output <file>', 'Output file')
+  .description('Export components as Storybook stories')
+  .option('-o, --output <file>', 'Output file (otherwise stdout)')
   .action((nodeId, options) => {
     checkConnection();
     let cmd = 'npx figma-use export storybook';
     if (nodeId) cmd += ` "${nodeId}"`;
-    if (options.output) cmd += ` -o "${options.output}"`;
-    execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+    if (options.output) {
+      cmd += ` > "${options.output}"`;
+      execSync(cmd, { shell: true, stdio: 'inherit', timeout: 60000 });
+    } else {
+      execSync(cmd, { stdio: 'inherit', timeout: 60000 });
+    }
   });
 
 // ============ FIGJAM ============

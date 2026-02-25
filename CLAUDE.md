@@ -135,11 +135,11 @@ node src/index.js daemon stop     # Stop daemon
 
 1. **ALWAYS use `render` for creating frames** - It has smart positioning (no overlaps) and handles fonts correctly
 2. **NEVER use `eval` to create visual elements** - No smart positioning, elements will overlap at (0,0)
-3. **Use `eval` ONLY for**: Variable bindings, deletions, moves, property changes on existing nodes
-4. **Use `npx figma-use` directly** - Faster than wrapper commands, especially with daemon
-5. **Write scripts to `/tmp/`** - Run with `npx figma-use eval "$(cat /tmp/script.js)"`
-6. **Convert frames with `node to-component`** - `npx figma-use node to-component "id1 id2 id3"`
-7. **Always verify with `node tree`** - Check all children are present after creation
+3. **NEVER use `npx figma-use render` directly** - It has NO smart positioning! Always use `node src/index.js render`
+4. **Use `eval` ONLY for**: Variable bindings, deletions, moves, property changes on existing nodes
+5. **For multiple frames**: Use `render-batch` with JSON array (one process, fast)
+6. **Convert frames to components**: `node src/index.js node to-component "id1" "id2"`
+7. **Always verify with `node tree`**: Check all children are present after creation
 
 ## CRITICAL: Smart Positioning
 
@@ -151,7 +151,12 @@ node src/index.js render '<Frame name="Card" w={300} h={200} bg="#fff" p={24}><T
 
 # WRONG - will overlap at (0,0)
 node src/index.js eval "const f = figma.createFrame(); f.name = 'Card';"
+
+# WRONG - npx figma-use has NO smart positioning!
+npx figma-use render --stdin  # DON'T USE THIS DIRECTLY
 ```
+
+**IMPORTANT:** Never use `npx figma-use render` directly. Always use `node src/index.js render` which wraps it with smart positioning.
 
 ## CRITICAL: Multiple Frames = Use render-batch
 

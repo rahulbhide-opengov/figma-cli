@@ -770,16 +770,17 @@ program
 
     // Fun welcome message for designers
     console.log();
-    console.log(chalk.hex('#FF6B35')('  ╭─────────────────────────────────────────────╮'));
-    console.log(chalk.hex('#FF6B35')('  │                                             │'));
-    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.hex('#FFE66D').bold('Hey designer!') + chalk.hex('#FF6B35')('                            │'));
-    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.white("Don't be afraid of the terminal!") + chalk.hex('#FF6B35')('        │'));
-    console.log(chalk.hex('#FF6B35')('  │                                             │'));
-    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.hex('#4ECDC4').bold('Happy vibe coding!') + chalk.hex('#FF6B35')('                      │'));
-    console.log(chalk.hex('#FF6B35')('  │                                             │'));
-    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.gray('Sil') + chalk.hex('#FF6B35')('                                          │'));
-    console.log(chalk.hex('#FF6B35')('  │  ') + chalk.hex('#4ECDC4')('intodesignsystems.com') + chalk.hex('#FF6B35')('                    │'));
-    console.log(chalk.hex('#FF6B35')('  ╰─────────────────────────────────────────────╯'));
+    console.log(chalk.hex('#FF6B35')('  ██   ██ ███████ ██    ██ ██'));
+    console.log(chalk.hex('#FF8C42')('  ██   ██ ██       ██  ██  ██'));
+    console.log(chalk.hex('#FFE66D')('  ███████ █████     ████   ██'));
+    console.log(chalk.hex('#4ECDC4')('  ██   ██ ██         ██    '));
+    console.log(chalk.hex('#45B7AA')('  ██   ██ ███████    ██    ██'));
+    console.log();
+    console.log(chalk.white('  ✨ Don\'t be afraid of the terminal!'));
+    console.log();
+    console.log(chalk.hex('#4ECDC4')('  🎨 Happy vibe coding!'));
+    console.log();
+    console.log(chalk.gray('  Sil · ') + chalk.hex('#FF6B35')('intodesignsystems.com'));
     console.log();
   });
 

@@ -41,7 +41,7 @@ Other tools require MCP servers, API keys, or complex setup. This one doesn't.
 
 | | figma-ds-cli | MCP-based tools |
 |---|---|---|
-| **Setup** | Download ZIP, `npm install`, done | Configure MCP server + client |
+| **Setup** | Download ZIP, run `claude`, done | Configure MCP server + client |
 | **API Key** | Not needed | Personal Access Token or OAuth |
 | **Claude Code** | Just run `claude` | Manual MCP configuration |
 | **AI Knowledge** | `CLAUDE.md` included, AI knows everything | Teach AI manually |
@@ -61,71 +61,50 @@ No explaining. No teaching. Just ask.
 
 ---
 
-## Requirements
+## What You Need
 
-- Node.js 18+
-- Figma Desktop (free account works)
-- macOS, Windows, or Linux
+- **Figma Desktop** (free account works)
+- **Claude Code** ([get it here](https://claude.ai/download))
 
-### ⚠️ macOS: Full Disk Access Required
+---
 
-On macOS, your Terminal needs **Full Disk Access** permission to patch Figma. **Do this first:**
+## Setup (4 Steps)
 
-1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
-2. Click **+** and add your terminal app (Terminal, iTerm, VS Code, Warp, etc.)
-3. **Restart your terminal** (quit completely and reopen)
+### Step 1: Download
 
-Without this, the CLI cannot connect to Figma.
+Go to **[github.com/silships/figma-cli](https://github.com/silships/figma-cli)**
 
-## Installation
+Click **Code** → **Download ZIP**. Unzip it.
 
-### Option A: Download ZIP (Simple)
+### Step 2: Open Terminal
 
-Best for designers who want to try it once:
+On Mac: Open Terminal (Spotlight → type "Terminal")
 
-1. Click the green **Code** button above
-2. Select **Download ZIP**
-3. Unzip the folder
-4. Open Terminal and navigate to the folder:
+Navigate to the folder:
 
 ```bash
 cd ~/Downloads/figma-cli-main
 ```
 
-That's it! No `npm install` needed, dependencies are included.
-
-### Option B: Git Clone (Always Latest)
-
-Best if you want automatic updates:
-
-```bash
-git clone https://github.com/silships/figma-cli.git
-cd figma-cli
-```
-
-To update to the latest version anytime:
-
-```bash
-git pull
-```
-
-## Quick Start
-
-**1. Connect to Figma**
-
-```bash
-node src/index.js connect
-```
-
-This starts Figma with remote debugging enabled.
-
-**2. Use with Claude Code**
+### Step 3: Start Claude
 
 ```bash
 claude
 ```
 
-Then just ask:
+### Step 4: First Message
+
+Type this as your first message to Claude:
+
+> Setup: install dependencies and connect to Figma
+
+**Done.** Now talk to Claude about your Figma file.
+
+---
+
+## Example Prompts
+
+Once connected, just ask:
 
 > "Create Tailwind colors"
 
@@ -133,7 +112,22 @@ Then just ask:
 
 > "Export variables as CSS"
 
+> "Analyze the colors in my design"
+
 The included `CLAUDE.md` teaches Claude all commands automatically.
+
+---
+
+## Updating
+
+To get the latest version:
+
+```bash
+cd ~/Downloads/figma-cli-main
+git pull
+```
+
+Or just download the ZIP again.
 
 ## How It Works
 

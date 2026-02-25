@@ -125,8 +125,13 @@ async function fastRender(jsx) {
 }
 
 // Start daemon in background
-function startDaemon() {
-  if (isDaemonRunning()) {
+function startDaemon(forceRestart = false) {
+  // If force restart, always kill existing daemon first
+  if (forceRestart) {
+    stopDaemon();
+    // Wait for port to be released
+    try { execSync('sleep 0.3', { stdio: 'pipe' }); } catch {}
+  } else if (isDaemonRunning()) {
     return true; // Already running
   }
 
@@ -849,10 +854,10 @@ program
       return;
     }
 
-    // Start daemon for fast commands
+    // Start daemon for fast commands (force restart to get fresh connection)
     const daemonSpinner = ora('Starting speed daemon...').start();
     try {
-      startDaemon();
+      startDaemon(true);  // Always restart daemon on connect
       await new Promise(r => setTimeout(r, 1500));
       if (isDaemonRunning()) {
         daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');

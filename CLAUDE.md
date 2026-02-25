@@ -11,6 +11,212 @@ node src/index.js connect
 
 ## What Users Might Ask → Commands
 
+### Canvas Awareness (Smart Positioning)
+
+"Show what's on canvas"
+```bash
+node src/index.js canvas info
+```
+
+"Get next free position"
+```bash
+node src/index.js canvas next           # Returns { x, y } for next free spot
+node src/index.js canvas next -d below  # Position below existing content
+```
+
+**Smart Positioning**: All `create` commands auto-position to avoid overlaps when no `-x` is specified.
+
+### Variable Binding
+
+"Bind color variable to fill"
+```bash
+node src/index.js bind fill "primary/500"
+node src/index.js bind fill "background/default" -n "1:234"
+```
+
+"Bind variable to stroke, radius, gap, padding"
+```bash
+node src/index.js bind stroke "border/default"
+node src/index.js bind radius "radius/md"
+node src/index.js bind gap "spacing/md"
+node src/index.js bind padding "spacing/lg"
+```
+
+"List available variables"
+```bash
+node src/index.js bind list
+node src/index.js bind list -t COLOR
+node src/index.js bind list -t FLOAT
+```
+
+### Sizing Control (Auto-Layout)
+
+"Hug contents"
+```bash
+node src/index.js sizing hug
+node src/index.js sizing hug -a h    # Horizontal only
+```
+
+"Fill container"
+```bash
+node src/index.js sizing fill
+node src/index.js sizing fill -a v   # Vertical only
+```
+
+"Fixed size"
+```bash
+node src/index.js sizing fixed 320 200
+```
+
+### Layout Shortcuts
+
+"Set padding"
+```bash
+node src/index.js padding 16              # All sides
+node src/index.js padding 16 24           # Vertical, horizontal
+node src/index.js padding 16 24 16 24     # Top, right, bottom, left
+```
+
+"Set gap"
+```bash
+node src/index.js gap 16
+```
+
+"Align items"
+```bash
+node src/index.js align center
+node src/index.js align start
+node src/index.js align stretch
+```
+
+### Quick Primitives (Fast Design)
+
+**All create commands auto-position to avoid overlaps** when no `-x` is specified.
+
+"Create a rectangle"
+```bash
+node src/index.js create rect "Card" -w 320 -h 200 --fill "#ffffff" --radius 12
+```
+
+"Create a circle"
+```bash
+node src/index.js create circle "Avatar" -w 48 --fill "#3b82f6"
+```
+
+"Add text"
+```bash
+node src/index.js create text "Hello World" -s 24 -c "#000000" -w bold
+```
+
+"Create a line"
+```bash
+node src/index.js create line -l 200 -c "#e4e4e7"
+```
+
+"Create an auto-layout frame"
+```bash
+node src/index.js create autolayout "Card" -d col -g 16 -p 24 --fill "#ffffff" --radius 12
+```
+
+"Create an icon"
+```bash
+node src/index.js create icon lucide:star -s 24 -c "#f59e0b"
+```
+
+"Group selection"
+```bash
+node src/index.js create group "Header"
+```
+
+"Make selection a component"
+```bash
+node src/index.js create component "Button"
+```
+
+### Modify Elements
+
+"Change fill color"
+```bash
+node src/index.js set fill "#3b82f6"           # On selection
+node src/index.js set fill "#3b82f6" -n "1:234" # On specific node
+```
+
+"Add stroke"
+```bash
+node src/index.js set stroke "#e4e4e7" -w 1
+```
+
+"Change corner radius"
+```bash
+node src/index.js set radius 12
+```
+
+"Resize element"
+```bash
+node src/index.js set size 320 200
+```
+
+"Move element"
+```bash
+node src/index.js set pos 100 100
+```
+
+"Set opacity"
+```bash
+node src/index.js set opacity 0.5
+```
+
+"Apply auto-layout to frame"
+```bash
+node src/index.js set autolayout row -g 8 -p 16
+```
+
+"Rename node"
+```bash
+node src/index.js set name "Header"
+```
+
+### Select, Find & Inspect
+
+"Select a node"
+```bash
+node src/index.js select "1:234"
+```
+
+"Find nodes by name"
+```bash
+node src/index.js find "Button"
+node src/index.js find "Card" -t FRAME
+```
+
+"Get node properties"
+```bash
+node src/index.js get              # Selection
+node src/index.js get "1:234"      # Specific node
+```
+
+### Duplicate & Delete
+
+"Duplicate selection"
+```bash
+node src/index.js duplicate
+node src/index.js dup "1:234" --offset 50
+```
+
+"Delete selection"
+```bash
+node src/index.js delete
+node src/index.js delete "1:234"
+```
+
+### Arrange
+
+"Arrange all frames"
+```bash
+node src/index.js arrange -g 100          # Single row
+node src/index.js arrange -g 100 -c 3     # 3 columns
+```
+
 ### Design Tokens & Variables
 
 "Create a design system"
@@ -237,6 +443,57 @@ node src/index.js fj eval "
    ```
 
 ## Creating Designs Best Practices
+
+### WICHTIG: Elemente INNERHALB von Frames erstellen
+
+Wenn der User "erstelle ein Design" sagt:
+1. **Erstelle einen Frame** mit Auto-Layout als Container
+2. **Alle Elemente INNERHALB** des Frames mit `frame.appendChild(element)`
+3. **Nie lose Elemente** direkt auf dem Canvas
+
+```javascript
+// RICHTIG: Elemente innerhalb eines Frames
+const frame = figma.createFrame();
+frame.layoutMode = 'VERTICAL';
+frame.itemSpacing = 16;
+frame.paddingTop = 24;
+// ...
+
+const title = figma.createText();
+title.characters = 'Title';
+frame.appendChild(title);  // INNERHALB des Frames
+
+const body = figma.createText();
+body.characters = 'Body';
+frame.appendChild(body);   // INNERHALB des Frames
+```
+
+### Zwei Ebenen der Positionierung
+
+1. **Frames auf Canvas** → Smart Positioning (nebeneinander, nie überlappend)
+2. **Elemente in Frame** → appendChild + Auto-Layout
+
+```javascript
+// Mehrere Cards nebeneinander auf Canvas
+for (const cardData of cards) {
+  // Smart position für jeden Frame
+  let smartX = 0;
+  figma.currentPage.children.forEach(n => {
+    smartX = Math.max(smartX, n.x + n.width);
+  });
+  smartX += 40; // Gap zwischen Frames
+
+  const card = figma.createFrame();
+  card.x = smartX;
+  card.layoutMode = 'VERTICAL';
+
+  // Elemente INNERHALB der Card
+  const title = figma.createText();
+  card.appendChild(title);
+}
+```
+
+### Weitere Best Practices
 
 1. **Always check available variables and components first** before creating designs:
    ```bash

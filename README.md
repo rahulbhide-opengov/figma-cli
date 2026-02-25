@@ -112,15 +112,83 @@ figma-ds-cli col list
 figma-ds-cli col create "Color - Semantic"
 ```
 
-### Create Elements
+### Create Elements (Primitives)
 
 ```bash
 # Create a frame
 figma-ds-cli create frame "Card" -w 320 -h 200 --fill "#ffffff" --radius 12
 
+# Create a rectangle
+figma-ds-cli create rect "Box" -w 200 -h 100 --fill "#3b82f6" --radius 8
+
+# Create a circle
+figma-ds-cli create circle "Avatar" -w 48 --fill "#ef4444"
+
+# Create text
+figma-ds-cli create text "Hello World" -s 24 -c "#000" -w bold
+
+# Create a line
+figma-ds-cli create line --x1 0 --y1 0 --x2 200 --y2 0
+
+# Create auto-layout frame
+figma-ds-cli create autolayout "Stack" -d col -g 16 -p 24
+
 # Create an icon (150k+ Iconify icons)
 figma-ds-cli create icon lucide:star -s 24 -c "#f59e0b"
 figma-ds-cli create icon mdi:home -s 32 -c "#3b82f6"
+
+# Group selection
+figma-ds-cli create group "Header"
+
+# Convert to component
+figma-ds-cli create component "Button"
+```
+
+### Modify Elements
+
+```bash
+# Set fill color
+figma-ds-cli set fill "#3b82f6"
+
+# Set stroke
+figma-ds-cli set stroke "#e4e4e7" -w 1
+
+# Set corner radius
+figma-ds-cli set radius 12
+
+# Resize
+figma-ds-cli set size 320 200
+
+# Move
+figma-ds-cli set pos 100 100
+
+# Apply auto-layout
+figma-ds-cli set autolayout row -g 8
+
+# Rename
+figma-ds-cli set name "Header"
+```
+
+### Find & Inspect
+
+```bash
+# Select node
+figma-ds-cli select "1:234"
+
+# Find by name
+figma-ds-cli find "Button"
+
+# Get properties
+figma-ds-cli get "1:234"
+
+# Delete
+figma-ds-cli delete "1:234"
+
+# Duplicate
+figma-ds-cli dup "1:234"
+
+# Arrange frames
+figma-ds-cli arrange -g 100 -c 3
 ```
 
 ### Render JSX

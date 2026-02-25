@@ -152,6 +152,18 @@ function hexToRgb(hex) {
   };
 }
 
+// Helper: Smart positioning code (returns JS to get next free X position)
+function smartPosCode(gap = 100) {
+  return `
+const children = figma.currentPage.children;
+let smartX = 0;
+if (children.length > 0) {
+  children.forEach(n => { smartX = Math.max(smartX, n.x + n.width); });
+  smartX += ${gap};
+}
+`;
+}
+
 program
   .name('figma-ds-cli')
   .description('CLI for managing Figma design systems')
@@ -1151,26 +1163,947 @@ create
   .description('Create a frame')
   .option('-w, --width <n>', 'Width', '100')
   .option('-h, --height <n>', 'Height', '100')
-  .option('-x <n>', 'X position', '0')
+  .option('-x <n>', 'X position')
   .option('-y <n>', 'Y position', '0')
   .option('--fill <color>', 'Fill color')
   .option('--radius <n>', 'Corner radius')
+  .option('--smart', 'Auto-position to avoid overlaps (default if no -x)')
+  .option('-g, --gap <n>', 'Gap for smart positioning', '100')
   .action((name, options) => {
     checkConnection();
-    let cmd = `create frame --name "${name}" --x ${options.x} --y ${options.y} --width ${options.width} --height ${options.height}`;
-    if (options.fill) cmd += ` --fill "${options.fill}"`;
-    if (options.radius) cmd += ` --radius ${options.radius}`;
-    figmaUse(cmd);
+    // Smart positioning: if no X specified, auto-position
+    const useSmartPos = options.smart || options.x === undefined;
+    if (useSmartPos) {
+      const { r, g, b } = options.fill ? hexToRgb(options.fill) : { r: 1, g: 1, b: 1 };
+      let code = `
+${smartPosCode(options.gap)}
+const frame = figma.createFrame();
+frame.name = '${name}';
+frame.x = smartX;
+frame.y = ${options.y};
+frame.resize(${options.width}, ${options.height});
+${options.fill ? `frame.fills = [{ type: 'SOLID', color: { r: ${r}, g: ${g}, b: ${b} } }];` : ''}
+${options.radius ? `frame.cornerRadius = ${options.radius};` : ''}
+figma.currentPage.selection = [frame];
+'${name} created at (' + smartX + ', ${options.y})'
+`;
+      figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+    } else {
+      let cmd = `create frame --name "${name}" --x ${options.x} --y ${options.y} --width ${options.width} --height ${options.height}`;
+      if (options.fill) cmd += ` --fill "${options.fill}"`;
+      if (options.radius) cmd += ` --radius ${options.radius}`;
+      figmaUse(cmd);
+    }
   });
 
 create
   .command('icon <name>')
-  .description('Create an icon from Iconify (e.g., lucide:star, mdi:home)')
+  .description('Create an icon from Iconify (e.g., lucide:star, mdi:home) - auto-positions')
   .option('-s, --size <n>', 'Size', '24')
   .option('-c, --color <color>', 'Color', '#000000')
+  .option('-x <n>', 'X position (auto if not set)')
+  .option('-y <n>', 'Y position', '0')
+  .option('--spacing <n>', 'Gap from other elements', '100')
   .action((name, options) => {
     checkConnection();
-    figmaUse(`create icon ${name} --size ${options.size} --color "${options.color}"`);
+    const useSmartPos = options.x === undefined;
+    if (useSmartPos) {
+      // First create icon at 0,0, then move it to smart position
+      const code = `
+${smartPosCode(options.spacing)}
+const icon = figma.currentPage.selection[0];
+if (icon) {
+  icon.x = smartX;
+  icon.y = ${options.y};
+  'Icon moved to (' + smartX + ', ${options.y})';
+} else {
+  'No icon selected';
+}
+`;
+      figmaUse(`create icon ${name} --size ${options.size} --color "${options.color}"`);
+      // Move to smart position after creation
+      setTimeout(() => {
+        figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      }, 500);
+    } else {
+      figmaUse(`create icon ${name} --size ${options.size} --color "${options.color}" -x ${options.x} -y ${options.y}`);
+    }
+  });
+
+create
+  .command('rect [name]')
+  .alias('rectangle')
+  .description('Create a rectangle (auto-positions to avoid overlap)')
+  .option('-w, --width <n>', 'Width', '100')
+  .option('-h, --height <n>', 'Height', '100')
+  .option('-x <n>', 'X position (auto if not set)')
+  .option('-y <n>', 'Y position', '0')
+  .option('--fill <color>', 'Fill color', '#D9D9D9')
+  .option('--stroke <color>', 'Stroke color')
+  .option('--radius <n>', 'Corner radius')
+  .option('--opacity <n>', 'Opacity 0-1')
+  .action((name, options) => {
+    checkConnection();
+    const rectName = name || 'Rectangle';
+    const { r, g, b } = hexToRgb(options.fill);
+    const useSmartPos = options.x === undefined;
+    let code = `
+${useSmartPos ? smartPosCode(100) : `const smartX = ${options.x};`}
+const rect = figma.createRectangle();
+rect.name = '${rectName}';
+rect.x = smartX;
+rect.y = ${options.y};
+rect.resize(${options.width}, ${options.height});
+rect.fills = [{ type: 'SOLID', color: { r: ${r}, g: ${g}, b: ${b} } }];
+${options.radius ? `rect.cornerRadius = ${options.radius};` : ''}
+${options.opacity ? `rect.opacity = ${options.opacity};` : ''}
+${options.stroke ? `rect.strokes = [{ type: 'SOLID', color: { r: ${hexToRgb(options.stroke).r}, g: ${hexToRgb(options.stroke).g}, b: ${hexToRgb(options.stroke).b} } }]; rect.strokeWeight = 1;` : ''}
+figma.currentPage.selection = [rect];
+'${rectName} created at (' + smartX + ', ${options.y})'
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+create
+  .command('ellipse [name]')
+  .alias('circle')
+  .description('Create an ellipse/circle (auto-positions to avoid overlap)')
+  .option('-w, --width <n>', 'Width (diameter)', '100')
+  .option('-h, --height <n>', 'Height (same as width for circle)')
+  .option('-x <n>', 'X position (auto if not set)')
+  .option('-y <n>', 'Y position', '0')
+  .option('--fill <color>', 'Fill color', '#D9D9D9')
+  .option('--stroke <color>', 'Stroke color')
+  .action((name, options) => {
+    checkConnection();
+    const ellipseName = name || 'Ellipse';
+    const height = options.height || options.width;
+    const { r, g, b } = hexToRgb(options.fill);
+    const useSmartPos = options.x === undefined;
+    let code = `
+${useSmartPos ? smartPosCode(100) : `const smartX = ${options.x};`}
+const ellipse = figma.createEllipse();
+ellipse.name = '${ellipseName}';
+ellipse.x = smartX;
+ellipse.y = ${options.y};
+ellipse.resize(${options.width}, ${height});
+ellipse.fills = [{ type: 'SOLID', color: { r: ${r}, g: ${g}, b: ${b} } }];
+${options.stroke ? `ellipse.strokes = [{ type: 'SOLID', color: { r: ${hexToRgb(options.stroke).r}, g: ${hexToRgb(options.stroke).g}, b: ${hexToRgb(options.stroke).b} } }]; ellipse.strokeWeight = 1;` : ''}
+figma.currentPage.selection = [ellipse];
+'${ellipseName} created at (' + smartX + ', ${options.y})'
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+create
+  .command('text <content>')
+  .description('Create a text layer (smart positions by default)')
+  .option('-x <n>', 'X position (auto if not set)')
+  .option('-y <n>', 'Y position', '0')
+  .option('-s, --size <n>', 'Font size', '16')
+  .option('-c, --color <color>', 'Text color', '#000000')
+  .option('-w, --weight <weight>', 'Font weight: regular, medium, semibold, bold', 'regular')
+  .option('--font <family>', 'Font family', 'Inter')
+  .option('--width <n>', 'Text box width (auto-width if not set)')
+  .option('--spacing <n>', 'Gap from other elements', '100')
+  .action((content, options) => {
+    checkConnection();
+    const { r, g, b } = hexToRgb(options.color);
+    const weightMap = { regular: 'Regular', medium: 'Medium', semibold: 'Semi Bold', bold: 'Bold' };
+    const fontStyle = weightMap[options.weight.toLowerCase()] || 'Regular';
+    const useSmartPos = options.x === undefined;
+    let code = `
+(async function() {
+  ${useSmartPos ? smartPosCode(options.spacing) : `const smartX = ${options.x};`}
+  await figma.loadFontAsync({ family: '${options.font}', style: '${fontStyle}' });
+  const text = figma.createText();
+  text.fontName = { family: '${options.font}', style: '${fontStyle}' };
+  text.characters = '${content.replace(/'/g, "\\'")}';
+  text.fontSize = ${options.size};
+  text.fills = [{ type: 'SOLID', color: { r: ${r}, g: ${g}, b: ${b} } }];
+  text.x = smartX;
+  text.y = ${options.y};
+  ${options.width ? `text.resize(${options.width}, text.height); text.textAutoResize = 'HEIGHT';` : ''}
+  figma.currentPage.selection = [text];
+  return 'Text created at (' + smartX + ', ${options.y})';
+})()
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+create
+  .command('line')
+  .description('Create a line (smart positions by default)')
+  .option('--x1 <n>', 'Start X (auto if not set)')
+  .option('--y1 <n>', 'Start Y', '0')
+  .option('--x2 <n>', 'End X (auto + length if x1 not set)')
+  .option('--y2 <n>', 'End Y', '0')
+  .option('-l, --length <n>', 'Line length', '100')
+  .option('-c, --color <color>', 'Line color', '#000000')
+  .option('-w, --weight <n>', 'Stroke weight', '1')
+  .option('--spacing <n>', 'Gap from other elements', '100')
+  .action((options) => {
+    checkConnection();
+    const { r, g, b } = hexToRgb(options.color);
+    const useSmartPos = options.x1 === undefined;
+    const lineLength = parseFloat(options.length);
+    let code = `
+${useSmartPos ? smartPosCode(options.spacing) : `const smartX = ${options.x1};`}
+const line = figma.createLine();
+line.x = smartX;
+line.y = ${options.y1};
+line.resize(${useSmartPos ? lineLength : `Math.abs(${options.x2 || options.x1 + '+' + lineLength} - ${options.x1}) || ${lineLength}`}, 0);
+${options.x2 && options.x1 ? `line.rotation = Math.atan2(${options.y2} - ${options.y1}, ${options.x2} - ${options.x1}) * 180 / Math.PI;` : ''}
+line.strokes = [{ type: 'SOLID', color: { r: ${r}, g: ${g}, b: ${b} } }];
+line.strokeWeight = ${options.weight};
+figma.currentPage.selection = [line];
+'Line created at (' + smartX + ', ${options.y1}) with length ${lineLength}'
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+create
+  .command('component [name]')
+  .description('Convert selection to component')
+  .action((name) => {
+    checkConnection();
+    const compName = name || 'Component';
+    let code = `
+const sel = figma.currentPage.selection;
+if (sel.length === 0) 'No selection';
+else if (sel.length === 1) {
+  const comp = figma.createComponentFromNode(sel[0]);
+  comp.name = '${compName}';
+  figma.currentPage.selection = [comp];
+  'Component created: ' + comp.name;
+} else {
+  const group = figma.group(sel, figma.currentPage);
+  const comp = figma.createComponentFromNode(group);
+  comp.name = '${compName}';
+  figma.currentPage.selection = [comp];
+  'Component created from ' + sel.length + ' elements: ' + comp.name;
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+create
+  .command('group [name]')
+  .description('Group current selection')
+  .action((name) => {
+    checkConnection();
+    const groupName = name || 'Group';
+    let code = `
+const sel = figma.currentPage.selection;
+if (sel.length < 2) 'Select 2+ elements to group';
+else {
+  const group = figma.group(sel, figma.currentPage);
+  group.name = '${groupName}';
+  figma.currentPage.selection = [group];
+  'Grouped ' + sel.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+create
+  .command('autolayout [name]')
+  .alias('al')
+  .description('Create an auto-layout frame (smart positions by default)')
+  .option('-d, --direction <dir>', 'Direction: row, col', 'row')
+  .option('-g, --gap <n>', 'Gap between items', '8')
+  .option('-p, --padding <n>', 'Padding', '16')
+  .option('-x <n>', 'X position (auto if not set)')
+  .option('-y <n>', 'Y position', '0')
+  .option('--fill <color>', 'Fill color')
+  .option('--radius <n>', 'Corner radius')
+  .option('--spacing <n>', 'Gap from other elements', '100')
+  .action((name, options) => {
+    checkConnection();
+    const frameName = name || 'Auto Layout';
+    const layoutMode = options.direction === 'col' ? 'VERTICAL' : 'HORIZONTAL';
+    const useSmartPos = options.x === undefined;
+    let code = `
+${useSmartPos ? smartPosCode(options.spacing) : `const smartX = ${options.x};`}
+const frame = figma.createFrame();
+frame.name = '${frameName}';
+frame.x = smartX;
+frame.y = ${options.y};
+frame.layoutMode = '${layoutMode}';
+frame.primaryAxisSizingMode = 'AUTO';
+frame.counterAxisSizingMode = 'AUTO';
+frame.itemSpacing = ${options.gap};
+frame.paddingTop = ${options.padding};
+frame.paddingRight = ${options.padding};
+frame.paddingBottom = ${options.padding};
+frame.paddingLeft = ${options.padding};
+${options.fill ? `frame.fills = [{ type: 'SOLID', color: { r: ${hexToRgb(options.fill).r}, g: ${hexToRgb(options.fill).g}, b: ${hexToRgb(options.fill).b} } }];` : 'frame.fills = [];'}
+${options.radius ? `frame.cornerRadius = ${options.radius};` : ''}
+figma.currentPage.selection = [frame];
+'Auto-layout frame created at (' + smartX + ', ${options.y})'
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ CANVAS ============
+
+const canvas = program
+  .command('canvas')
+  .description('Canvas awareness and smart positioning');
+
+canvas
+  .command('info')
+  .description('Show canvas info (bounds, element count, free space)')
+  .action(() => {
+    checkConnection();
+    let code = `
+const children = figma.currentPage.children;
+if (children.length === 0) {
+  JSON.stringify({ empty: true, message: 'Canvas is empty', nextX: 0, nextY: 0 });
+} else {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  children.forEach(n => {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.width);
+    maxY = Math.max(maxY, n.y + n.height);
+  });
+  JSON.stringify({
+    elements: children.length,
+    bounds: { x: Math.round(minX), y: Math.round(minY), width: Math.round(maxX - minX), height: Math.round(maxY - minY) },
+    nextX: Math.round(maxX + 100),
+    nextY: 0,
+    frames: children.filter(n => n.type === 'FRAME').length,
+    components: children.filter(n => n.type === 'COMPONENT').length
+  }, null, 2);
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+canvas
+  .command('next')
+  .description('Get next free position on canvas (no overlap)')
+  .option('-g, --gap <n>', 'Gap from existing elements', '100')
+  .option('-d, --direction <dir>', 'Direction: right, below', 'right')
+  .action((options) => {
+    checkConnection();
+    let code = `
+const children = figma.currentPage.children;
+const gap = ${options.gap};
+if (children.length === 0) {
+  JSON.stringify({ x: 0, y: 0 });
+} else {
+  ${options.direction === 'below' ? `
+  let maxY = -Infinity;
+  children.forEach(n => { maxY = Math.max(maxY, n.y + n.height); });
+  JSON.stringify({ x: 0, y: Math.round(maxY + gap) });
+  ` : `
+  let maxX = -Infinity;
+  children.forEach(n => { maxX = Math.max(maxX, n.x + n.width); });
+  JSON.stringify({ x: Math.round(maxX + gap), y: 0 });
+  `}
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ BIND (Variables) ============
+
+const bind = program
+  .command('bind')
+  .description('Bind variables to node properties');
+
+bind
+  .command('fill <varName>')
+  .description('Bind color variable to fill')
+  .option('-n, --node <id>', 'Node ID (uses selection if not set)')
+  .action((varName, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) 'Variable not found: ${varName}';
+else if (nodes.length === 0) 'No node selected';
+else {
+  nodes.forEach(n => {
+    if ('fills' in n && n.fills.length > 0) {
+      const newFill = figma.variables.setBoundVariableForPaint(n.fills[0], 'color', v);
+      n.fills = [newFill];
+    }
+  });
+  'Bound ' + v.name + ' to fill on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+bind
+  .command('stroke <varName>')
+  .description('Bind color variable to stroke')
+  .option('-n, --node <id>', 'Node ID')
+  .action((varName, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) 'Variable not found: ${varName}';
+else if (nodes.length === 0) 'No node selected';
+else {
+  nodes.forEach(n => {
+    if ('strokes' in n) {
+      const stroke = n.strokes[0] || { type: 'SOLID', color: {r:0,g:0,b:0} };
+      const newStroke = figma.variables.setBoundVariableForPaint(stroke, 'color', v);
+      n.strokes = [newStroke];
+    }
+  });
+  'Bound ' + v.name + ' to stroke on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+bind
+  .command('radius <varName>')
+  .description('Bind number variable to corner radius')
+  .option('-n, --node <id>', 'Node ID')
+  .action((varName, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) 'Variable not found: ${varName}';
+else if (nodes.length === 0) 'No node selected';
+else {
+  nodes.forEach(n => {
+    if ('cornerRadius' in n) n.setBoundVariable('cornerRadius', v);
+  });
+  'Bound ' + v.name + ' to radius on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+bind
+  .command('gap <varName>')
+  .description('Bind number variable to auto-layout gap')
+  .option('-n, --node <id>', 'Node ID')
+  .action((varName, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) 'Variable not found: ${varName}';
+else if (nodes.length === 0) 'No node selected';
+else {
+  nodes.forEach(n => {
+    if ('itemSpacing' in n) n.setBoundVariable('itemSpacing', v);
+  });
+  'Bound ' + v.name + ' to gap on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+bind
+  .command('padding <varName>')
+  .description('Bind number variable to padding')
+  .option('-n, --node <id>', 'Node ID')
+  .option('-s, --side <side>', 'Side: top, right, bottom, left, all', 'all')
+  .action((varName, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    const sides = options.side === 'all'
+      ? ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']
+      : [`padding${options.side.charAt(0).toUpperCase() + options.side.slice(1)}`];
+    let code = `
+${nodeSelector}
+const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) 'Variable not found: ${varName}';
+else if (nodes.length === 0) 'No node selected';
+else {
+  const sides = ${JSON.stringify(sides)};
+  nodes.forEach(n => {
+    sides.forEach(side => { if (side in n) n.setBoundVariable(side, v); });
+  });
+  'Bound ' + v.name + ' to padding on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+bind
+  .command('list')
+  .description('List available variables for binding')
+  .option('-t, --type <type>', 'Filter: COLOR, FLOAT')
+  .action((options) => {
+    checkConnection();
+    let code = `
+const vars = figma.variables.getLocalVariables();
+const filtered = vars${options.type ? `.filter(v => v.resolvedType === '${options.type.toUpperCase()}')` : ''};
+filtered.map(v => v.resolvedType.padEnd(8) + ' ' + v.name).join('\\n') || 'No variables';
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ SIZING ============
+
+const sizing = program
+  .command('sizing')
+  .description('Control sizing in auto-layout');
+
+sizing
+  .command('hug')
+  .description('Set to hug contents')
+  .option('-a, --axis <axis>', 'Axis: both, h, v', 'both')
+  .action((options) => {
+    checkConnection();
+    let code = `
+const nodes = figma.currentPage.selection;
+if (nodes.length === 0) 'No selection';
+else {
+  nodes.forEach(n => {
+    ${options.axis === 'h' || options.axis === 'both' ? `if ('layoutSizingHorizontal' in n) n.layoutSizingHorizontal = 'HUG';` : ''}
+    ${options.axis === 'v' || options.axis === 'both' ? `if ('layoutSizingVertical' in n) n.layoutSizingVertical = 'HUG';` : ''}
+    if (n.layoutMode) { n.primaryAxisSizingMode = 'AUTO'; n.counterAxisSizingMode = 'AUTO'; }
+  });
+  'Set hug on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+sizing
+  .command('fill')
+  .description('Set to fill container')
+  .option('-a, --axis <axis>', 'Axis: both, h, v', 'both')
+  .action((options) => {
+    checkConnection();
+    let code = `
+const nodes = figma.currentPage.selection;
+if (nodes.length === 0) 'No selection';
+else {
+  nodes.forEach(n => {
+    ${options.axis === 'h' || options.axis === 'both' ? `if ('layoutSizingHorizontal' in n) n.layoutSizingHorizontal = 'FILL';` : ''}
+    ${options.axis === 'v' || options.axis === 'both' ? `if ('layoutSizingVertical' in n) n.layoutSizingVertical = 'FILL';` : ''}
+  });
+  'Set fill on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+sizing
+  .command('fixed <width> [height]')
+  .description('Set to fixed size')
+  .action((width, height) => {
+    checkConnection();
+    const h = height || width;
+    let code = `
+const nodes = figma.currentPage.selection;
+if (nodes.length === 0) 'No selection';
+else {
+  nodes.forEach(n => {
+    if ('layoutSizingHorizontal' in n) n.layoutSizingHorizontal = 'FIXED';
+    if ('layoutSizingVertical' in n) n.layoutSizingVertical = 'FIXED';
+    if ('resize' in n) n.resize(${width}, ${h});
+  });
+  'Set fixed ${width}x${h} on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ LAYOUT SHORTCUTS ============
+
+program
+  .command('padding <value> [r] [b] [l]')
+  .alias('pad')
+  .description('Set padding (CSS-style: 1-4 values)')
+  .action((value, r, b, l) => {
+    checkConnection();
+    let top = value, right = r || value, bottom = b || value, left = l || r || value;
+    if (!r) { right = value; bottom = value; left = value; }
+    else if (!b) { bottom = value; left = r; }
+    else if (!l) { left = r; }
+    let code = `
+const nodes = figma.currentPage.selection;
+if (nodes.length === 0) 'No selection';
+else {
+  nodes.forEach(n => {
+    if ('paddingTop' in n) {
+      n.paddingTop = ${top}; n.paddingRight = ${right};
+      n.paddingBottom = ${bottom}; n.paddingLeft = ${left};
+    }
+  });
+  'Set padding on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+program
+  .command('gap <value>')
+  .description('Set auto-layout gap')
+  .action((value) => {
+    checkConnection();
+    let code = `
+const nodes = figma.currentPage.selection;
+if (nodes.length === 0) 'No selection';
+else {
+  nodes.forEach(n => { if ('itemSpacing' in n) n.itemSpacing = ${value}; });
+  'Set gap ${value} on ' + nodes.length + ' elements';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+program
+  .command('align <alignment>')
+  .description('Align items: start, center, end, stretch')
+  .action((alignment) => {
+    checkConnection();
+    const map = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH' };
+    const val = map[alignment.toLowerCase()] || 'CENTER';
+    let code = `
+const nodes = figma.currentPage.selection;
+if (nodes.length === 0) 'No selection';
+else {
+  nodes.forEach(n => {
+    if ('primaryAxisAlignItems' in n) n.primaryAxisAlignItems = '${val}';
+    if ('counterAxisAlignItems' in n) n.counterAxisAlignItems = '${val}';
+  });
+  'Aligned ' + nodes.length + ' elements to ${alignment}';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ SELECT ============
+
+program
+  .command('select <nodeId>')
+  .description('Select a node by ID')
+  .action((nodeId) => {
+    checkConnection();
+    figmaUse(`select "${nodeId}"`);
+  });
+
+// ============ DELETE ============
+
+program
+  .command('delete [nodeId]')
+  .alias('remove')
+  .description('Delete node by ID or current selection')
+  .action((nodeId) => {
+    checkConnection();
+    if (nodeId) {
+      let code = `
+const node = figma.getNodeById('${nodeId}');
+if (node) { node.remove(); 'Deleted: ${nodeId}'; } else { 'Node not found: ${nodeId}'; }
+`;
+      figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+    } else {
+      let code = `
+const sel = figma.currentPage.selection;
+if (sel.length === 0) 'No selection';
+else { const count = sel.length; sel.forEach(n => n.remove()); 'Deleted ' + count + ' elements'; }
+`;
+      figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+    }
+  });
+
+// ============ DUPLICATE ============
+
+program
+  .command('duplicate [nodeId]')
+  .alias('dup')
+  .description('Duplicate node by ID or current selection')
+  .option('--offset <n>', 'Offset from original', '20')
+  .action((nodeId, options) => {
+    checkConnection();
+    if (nodeId) {
+      let code = `
+const node = figma.getNodeById('${nodeId}');
+if (node) { const clone = node.clone(); clone.x += ${options.offset}; clone.y += ${options.offset}; figma.currentPage.selection = [clone]; 'Duplicated: ' + clone.id; } else { 'Node not found'; }
+`;
+      figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+    } else {
+      let code = `
+const sel = figma.currentPage.selection;
+if (sel.length === 0) 'No selection';
+else { const clones = sel.map(n => { const c = n.clone(); c.x += ${options.offset}; c.y += ${options.offset}; return c; }); figma.currentPage.selection = clones; 'Duplicated ' + clones.length + ' elements'; }
+`;
+      figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+    }
+  });
+
+// ============ SET ============
+
+const set = program
+  .command('set')
+  .description('Set properties on selection or node');
+
+set
+  .command('fill <color>')
+  .description('Set fill color')
+  .option('-n, --node <id>', 'Node ID (uses selection if not set)')
+  .action((color, options) => {
+    checkConnection();
+    const { r, g, b } = hexToRgb(color);
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+if (nodes.length === 0) 'No node found';
+else { nodes.forEach(n => { if ('fills' in n) n.fills = [{ type: 'SOLID', color: { r: ${r}, g: ${g}, b: ${b} } }]; }); 'Fill set on ' + nodes.length + ' elements'; }
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+set
+  .command('stroke <color>')
+  .description('Set stroke color')
+  .option('-n, --node <id>', 'Node ID')
+  .option('-w, --weight <n>', 'Stroke weight', '1')
+  .action((color, options) => {
+    checkConnection();
+    const { r, g, b } = hexToRgb(color);
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+if (nodes.length === 0) 'No node found';
+else { nodes.forEach(n => { if ('strokes' in n) { n.strokes = [{ type: 'SOLID', color: { r: ${r}, g: ${g}, b: ${b} } }]; n.strokeWeight = ${options.weight}; } }); 'Stroke set on ' + nodes.length + ' elements'; }
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+set
+  .command('radius <value>')
+  .description('Set corner radius')
+  .option('-n, --node <id>', 'Node ID')
+  .action((value, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+if (nodes.length === 0) 'No node found';
+else { nodes.forEach(n => { if ('cornerRadius' in n) n.cornerRadius = ${value}; }); 'Radius set on ' + nodes.length + ' elements'; }
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+set
+  .command('size <width> <height>')
+  .description('Set size')
+  .option('-n, --node <id>', 'Node ID')
+  .action((width, height, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+if (nodes.length === 0) 'No node found';
+else { nodes.forEach(n => { if ('resize' in n) n.resize(${width}, ${height}); }); 'Size set on ' + nodes.length + ' elements'; }
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+set
+  .command('pos <x> <y>')
+  .alias('position')
+  .description('Set position')
+  .option('-n, --node <id>', 'Node ID')
+  .action((x, y, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+if (nodes.length === 0) 'No node found';
+else { nodes.forEach(n => { n.x = ${x}; n.y = ${y}; }); 'Position set on ' + nodes.length + ' elements'; }
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+set
+  .command('opacity <value>')
+  .description('Set opacity (0-1)')
+  .option('-n, --node <id>', 'Node ID')
+  .action((value, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+if (nodes.length === 0) 'No node found';
+else { nodes.forEach(n => { if ('opacity' in n) n.opacity = ${value}; }); 'Opacity set on ' + nodes.length + ' elements'; }
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+set
+  .command('name <name>')
+  .description('Rename node')
+  .option('-n, --node <id>', 'Node ID')
+  .action((name, options) => {
+    checkConnection();
+    const nodeSelector = options.node
+      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      : `const nodes = figma.currentPage.selection;`;
+    let code = `
+${nodeSelector}
+if (nodes.length === 0) 'No node found';
+else { nodes.forEach(n => { n.name = '${name}'; }); 'Renamed ' + nodes.length + ' elements to ${name}'; }
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+set
+  .command('autolayout <direction>')
+  .alias('al')
+  .description('Apply auto-layout to selection (row/col)')
+  .option('-g, --gap <n>', 'Gap between items', '8')
+  .option('-p, --padding <n>', 'Padding')
+  .action((direction, options) => {
+    checkConnection();
+    const layoutMode = direction === 'col' || direction === 'vertical' ? 'VERTICAL' : 'HORIZONTAL';
+    let code = `
+const sel = figma.currentPage.selection;
+if (sel.length === 0) 'No selection';
+else {
+  sel.forEach(n => {
+    if (n.type === 'FRAME' || n.type === 'COMPONENT') {
+      n.layoutMode = '${layoutMode}';
+      n.primaryAxisSizingMode = 'AUTO';
+      n.counterAxisSizingMode = 'AUTO';
+      n.itemSpacing = ${options.gap};
+      ${options.padding ? `n.paddingTop = n.paddingRight = n.paddingBottom = n.paddingLeft = ${options.padding};` : ''}
+    }
+  });
+  'Auto-layout applied to ' + sel.length + ' frames';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ ARRANGE ============
+
+program
+  .command('arrange')
+  .description('Arrange frames on canvas')
+  .option('-g, --gap <n>', 'Gap between frames', '100')
+  .option('-c, --cols <n>', 'Number of columns (0 = single row)', '0')
+  .action((options) => {
+    checkConnection();
+    let code = `
+const frames = figma.currentPage.children.filter(n => n.type === 'FRAME' || n.type === 'COMPONENT');
+if (frames.length === 0) 'No frames to arrange';
+else {
+  frames.sort((a, b) => a.name.localeCompare(b.name));
+  let x = 0, y = 0, rowHeight = 0, col = 0;
+  const gap = ${options.gap};
+  const cols = ${options.cols};
+  frames.forEach((f, i) => {
+    f.x = x;
+    f.y = y;
+    rowHeight = Math.max(rowHeight, f.height);
+    if (cols > 0 && ++col >= cols) {
+      col = 0;
+      x = 0;
+      y += rowHeight + gap;
+      rowHeight = 0;
+    } else {
+      x += f.width + gap;
+    }
+  });
+  'Arranged ' + frames.length + ' frames';
+}
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ GET ============
+
+program
+  .command('get [nodeId]')
+  .description('Get properties of node or selection')
+  .action((nodeId) => {
+    checkConnection();
+    const nodeSelector = nodeId
+      ? `const node = figma.getNodeById('${nodeId}');`
+      : `const node = figma.currentPage.selection[0];`;
+    let code = `
+${nodeSelector}
+if (!node) 'No node found';
+else JSON.stringify({
+  id: node.id,
+  name: node.name,
+  type: node.type,
+  x: node.x,
+  y: node.y,
+  width: node.width,
+  height: node.height,
+  visible: node.visible,
+  locked: node.locked,
+  opacity: node.opacity,
+  rotation: node.rotation,
+  cornerRadius: node.cornerRadius,
+  layoutMode: node.layoutMode,
+  fills: node.fills?.length,
+  strokes: node.strokes?.length,
+  children: node.children?.length
+}, null, 2)
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
+  });
+
+// ============ FIND ============
+
+program
+  .command('find <name>')
+  .description('Find nodes by name (partial match)')
+  .option('-t, --type <type>', 'Filter by type (FRAME, TEXT, RECTANGLE, etc.)')
+  .option('-l, --limit <n>', 'Limit results', '20')
+  .action((name, options) => {
+    checkConnection();
+    let code = `
+const results = [];
+function search(node) {
+  if (node.name && node.name.toLowerCase().includes('${name.toLowerCase()}')) {
+    ${options.type ? `if (node.type === '${options.type.toUpperCase()}')` : ''}
+    results.push({ id: node.id, name: node.name, type: node.type });
+  }
+  if (node.children && results.length < ${options.limit}) {
+    node.children.forEach(search);
+  }
+}
+search(figma.currentPage);
+results.length === 0 ? 'No nodes found matching "${name}"' : results.slice(0, ${options.limit}).map(r => r.id + ' [' + r.type + '] ' + r.name).join('\\n')
+`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
 // ============ RENDER ============

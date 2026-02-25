@@ -42,12 +42,12 @@ npx figma-use node to-component "2:123"
 
 ## Key Learnings
 
-1. **Use `render` for frames with text** - JSX handles fonts and nesting automatically
-2. **Use `eval` for bulk operations** - Color palettes, variable bindings, deletions
+1. **ALWAYS use `render` for frames with text** - eval with async font loading creates incomplete content
+2. **Use `eval` only for non-text operations** - Color palettes, variable bindings, deletions, moves
 3. **Use `npx figma-use` directly** - Faster than wrapper commands, especially with daemon
 4. **Write scripts to `/tmp/`** - Run with `npx figma-use eval "$(cat /tmp/script.js)"`
 5. **Convert frames with `node to-component`** - `npx figma-use node to-component "id1 id2 id3"`
-6. **Verify with `node bindings`** - Check if fills/strokes are bound to variables
+6. **Always verify with `node tree`** - Check all children are present after creation
 
 ## What Users Might Ask → Commands
 

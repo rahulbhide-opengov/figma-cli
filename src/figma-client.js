@@ -300,7 +300,8 @@ export class FigmaClient {
       .map(s => `figma.loadFontAsync({family:'Inter',style:'${s}'})`)
       .join(',');
 
-    // Build text creation
+    // Build text creation - IMPORTANT: appendChild first, then set properties
+    // This ensures text is inside frame before any layout calculations
     const textCode = textElements.map((t, i) => {
       const weight = t.weight || 'regular';
       const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
@@ -310,22 +311,27 @@ export class FigmaClient {
 
       return `
         const text${i} = figma.createText();
+        frame.appendChild(text${i});
         text${i}.fontName = {family:'Inter',style:'${style}'};
         text${i}.fontSize = ${size};
         text${i}.characters = ${JSON.stringify(t.content)};
         text${i}.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
         ${fillWidth ? `text${i}.layoutSizingHorizontal = 'FILL'; text${i}.textAutoResize = 'HEIGHT';` : ''}
-        frame.appendChild(text${i});
       `;
     }).join('\n');
 
     // Smart positioning code: find next free X position
+    // Uses a small initial offset to avoid edge-case issues at (0,0)
     const smartPosCode = useSmartPos ? `
         let smartX = 0;
         const children = figma.currentPage.children;
         if (children.length > 0) {
-          children.forEach(n => { smartX = Math.max(smartX, n.x + n.width); });
-          smartX += 100;
+          let maxRight = 0;
+          children.forEach(n => {
+            const right = n.x + (n.width || 0);
+            if (right > maxRight) maxRight = right;
+          });
+          smartX = Math.round(maxRight + 100);
         }
     ` : `const smartX = ${explicitX};`;
 

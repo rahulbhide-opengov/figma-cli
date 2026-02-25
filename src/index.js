@@ -434,14 +434,19 @@ program.action(async () => {
         }
       } catch (error) {
         spinner.fail('Patch failed: ' + error.message);
-        if (error.message.includes('EPERM') || error.message.includes('permission')) {
-          console.log(chalk.yellow('\n  Troubleshooting (macOS):'));
-          console.log(chalk.gray('  1. Grant Terminal "Full Disk Access" (required!):'));
-          console.log(chalk.gray('     System Settings → Privacy & Security → Full Disk Access → Add Terminal'));
-          console.log(chalk.gray('  2. Restart Terminal completely (quit and reopen)'));
-          console.log(chalk.gray('  3. Make sure Figma is closed: killall Figma'));
-          console.log(chalk.gray('  4. Run again: node src/index.js init'));
-          console.log(chalk.gray('  See README.md for manual patch instructions\n'));
+        if ((error.message.includes('EPERM') || error.message.includes('permission') || error.message.includes('Full Disk Access')) && process.platform === 'darwin') {
+          console.log(chalk.yellow('\n  ⚠️  Your Terminal needs "Full Disk Access" permission.\n'));
+          console.log(chalk.white('  Opening System Settings for you...'));
+          console.log(chalk.gray('  1. Click + and add your Terminal app'));
+          console.log(chalk.gray('  2. Quit Terminal completely (Cmd+Q)'));
+          console.log(chalk.gray('  3. Reopen Terminal and run: node src/index.js init\n'));
+
+          // Open System Settings directly to Full Disk Access
+          try {
+            execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
+          } catch {}
+        } else if (error.message.includes('EPERM') || error.message.includes('permission')) {
+          console.log(chalk.yellow('\n  Try running as administrator.\n'));
         }
       }
     }
@@ -594,14 +599,19 @@ program
         }
       } catch (error) {
         spinner.fail('Patch failed: ' + error.message);
-        if (error.message.includes('EPERM') || error.message.includes('permission')) {
-          console.log(chalk.yellow('\n  Troubleshooting (macOS):'));
-          console.log(chalk.gray('  1. Grant Terminal "Full Disk Access" (required!):'));
-          console.log(chalk.gray('     System Settings → Privacy & Security → Full Disk Access → Add Terminal'));
-          console.log(chalk.gray('  2. Restart Terminal completely (quit and reopen)'));
-          console.log(chalk.gray('  3. Make sure Figma is closed: killall Figma'));
-          console.log(chalk.gray('  4. Run again: node src/index.js init'));
-          console.log(chalk.gray('  See README.md for manual patch instructions\n'));
+        if ((error.message.includes('EPERM') || error.message.includes('permission') || error.message.includes('Full Disk Access')) && process.platform === 'darwin') {
+          console.log(chalk.yellow('\n  ⚠️  Your Terminal needs "Full Disk Access" permission.\n'));
+          console.log(chalk.white('  Opening System Settings for you...'));
+          console.log(chalk.gray('  1. Click + and add your Terminal app'));
+          console.log(chalk.gray('  2. Quit Terminal completely (Cmd+Q)'));
+          console.log(chalk.gray('  3. Reopen Terminal and run: node src/index.js init\n'));
+
+          // Open System Settings directly to Full Disk Access
+          try {
+            execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
+          } catch {}
+        } else if (error.message.includes('EPERM') || error.message.includes('permission')) {
+          console.log(chalk.yellow('\n  Try running as administrator.\n'));
         }
       }
     }

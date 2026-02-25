@@ -438,6 +438,8 @@ export class FigmaClient {
         el${idx}.paddingRight = ${fPx};
         el${idx}.primaryAxisAlignItems = '${fJustifyVal}';
         el${idx}.counterAxisAlignItems = '${fAlignVal}';
+        el${idx}.primaryAxisSizingMode = 'FIXED';
+        el${idx}.counterAxisSizingMode = 'FIXED';
         ${parentVar}.appendChild(el${idx});
         ${nestedChildren}`;
         }

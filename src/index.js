@@ -1701,6 +1701,88 @@ create
     }
   });
 
+// ============ SCREENSHOT URL ============
+
+program
+  .command('screenshot-url <url>')
+  .alias('screenshot')
+  .description('Screenshot a website and import into Figma as reference')
+  .option('-w, --width <n>', 'Viewport width', '1280')
+  .option('-h, --height <n>', 'Viewport height', '800')
+  .option('--full', 'Capture full page (not just viewport)')
+  .option('-n, --name <name>', 'Node name', 'Screenshot')
+  .option('--scale <n>', 'Scale factor (1 or 2 for retina)', '2')
+  .action(async (url, options) => {
+    checkConnection();
+
+    const spinner = ora('Taking screenshot of ' + url + '...').start();
+
+    try {
+      const tempFile = '/tmp/figma-cli-screenshot.png';
+
+      // Build capture-website command
+      let cmd = `npx --yes capture-website-cli "${url}" --output="${tempFile}" --width=${options.width} --height=${options.height} --scale-factor=${options.scale}`;
+      if (options.full) cmd += ' --full-page';
+      cmd += ' --overwrite';
+
+      // Take screenshot
+      execSync(cmd, { stdio: 'ignore', timeout: 60000 });
+
+      if (!existsSync(tempFile)) {
+        throw new Error('Screenshot failed');
+      }
+
+      spinner.text = 'Importing into Figma...';
+
+      // Read as base64
+      const buffer = readFileSync(tempFile);
+      const base64 = buffer.toString('base64');
+      const dataUrl = 'data:image/png;base64,' + base64;
+
+      // Import into Figma with smart positioning
+      const code = `
+(async () => {
+  try {
+    // Smart positioning
+    let smartX = 0;
+    figma.currentPage.children.forEach(n => {
+      smartX = Math.max(smartX, n.x + (n.width || 0));
+    });
+    smartX += 100;
+
+    // Create image from base64
+    const image = await figma.createImageAsync("${dataUrl}");
+    const { width, height } = await image.getSizeAsync();
+
+    // Create rectangle with image fill
+    const rect = figma.createRectangle();
+    rect.name = "${options.name} - ${url}";
+    rect.resize(width, height);
+    rect.x = smartX;
+    rect.y = 0;
+    rect.fills = [{ type: 'IMAGE', scaleMode: 'FILL', imageHash: image.hash }];
+
+    figma.currentPage.selection = [rect];
+    figma.viewport.scrollAndZoomIntoView([rect]);
+
+    return 'Screenshot imported: ' + width + 'x' + height;
+  } catch (e) {
+    return 'Error: ' + e.message;
+  }
+})()
+`;
+
+      const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
+      spinner.succeed('Screenshot imported into Figma');
+      if (result) console.log(chalk.gray(result.trim()));
+
+      // Cleanup
+      try { unlinkSync(tempFile); } catch {}
+    } catch (e) {
+      spinner.fail('Failed: ' + e.message);
+    }
+  });
+
 // ============ REMOVE BACKGROUND ============
 
 program

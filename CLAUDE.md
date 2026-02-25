@@ -214,6 +214,14 @@ node src/index.js create image "https://example.com/photo.png" -w 200  # Scale t
 node src/index.js create image "https://example.com/photo.png" -w 200 -h 200  # Fixed size
 ```
 
+"Screenshot a website and import as reference"
+```bash
+node src/index.js screenshot-url "https://notion.com/login"
+node src/index.js screenshot-url "https://example.com" --full  # Full page
+node src/index.js screenshot-url "https://example.com" -w 1920 -h 1080  # Custom size
+```
+Use this when user asks to "recreate" or "rebuild" a website. Screenshot first, then use as visual reference.
+
 "Remove background from image" (select image in Figma first)
 ```bash
 node src/index.js remove-bg

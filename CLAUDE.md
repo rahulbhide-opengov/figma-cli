@@ -12,19 +12,33 @@ npm install
 ```
 
 ### Step 2: Patch Figma (enables CDP connection)
+
+First, check if Figma is running:
+```bash
+pgrep -x Figma
+```
+
+**If Figma is running:** Tell user to close Figma completely (Cmd+Q), then run:
 ```bash
 node src/index.js init
 ```
-**Note:** Figma must be completely closed. If permission error, user needs Full Disk Access (see below).
+
+**If Figma is closed:** Run directly:
+```bash
+node src/index.js init
+```
+
+If permission error → user needs Full Disk Access (see below).
 
 ### Step 3: Connect to Figma
+
+Tell user to open Figma Desktop and open a design file. Then:
 ```bash
 node src/index.js connect
 ```
-**Note:** Figma Desktop must be running with a design file open.
 
 ### Step 4: Show examples
-When connected, show these examples:
+When connected, show:
 ```
 Ready! Try asking:
 

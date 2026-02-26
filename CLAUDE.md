@@ -906,33 +906,49 @@ rotate={45}            // Rotation
 3. **Only use `overflow="hidden"`** when you want clipping
 
 ```bash
-# GOOD: Gallery that grows with cards (no fixed size)
+# GOOD: Gallery that grows with content (no fixed size)
 node src/index.js render '<Frame name="Gallery" flex="row" gap={24} p={40} bg="#f4f4f5">
-  <Instance name="Card 1" />
-  <Instance name="Card 2" />
+  <Frame name="Card 1" w={200} h={150} bg="#fff" rounded={8} />
+  <Frame name="Card 2" w={200} h={150} bg="#fff" rounded={8} />
 </Frame>'
 
-# BAD: Fixed size = cards may be clipped
+# BAD: Fixed size = content may be clipped
 <Frame w={800} h={400} overflow="hidden">
 ```
 
+**NOTE:** For component instances, use `eval` - see "Using Component Instances" below.
+
 ### Using Component Instances
 
-Create a gallery with existing components:
+**NOTE:** `<Instance>` does NOT work with `render` command. Use `eval` instead:
+
 ```bash
-node src/index.js render '<Frame name="Card Gallery" w={1200} h={400} bg="#f4f4f5" flex="row" gap={24} p={40}>
-  <Instance name="Card - Basic" />
-  <Instance name="Card - CTA" />
-  <Instance name="Card - Image" />
-</Frame>'
+# Create instance of a component by name
+node src/index.js eval "(function() {
+  const comp = figma.currentPage.findOne(n => n.type === 'COMPONENT' && n.name === 'Button - Primary');
+  if (!comp) return 'Component not found';
+  const instance = comp.createInstance();
+  instance.x = 100;
+  instance.y = 100;
+  return instance.id;
+})()"
 ```
 
-Or by component ID:
+To create a frame WITH component instances inside:
 ```bash
-node src/index.js render '<Frame name="Cards" flex="row" gap={24}>
-  <Instance component="2:28" />
-  <Instance component="2:29" />
-</Frame>'
+# Step 1: Create the container frame
+node src/index.js render '<Frame name="Form" w={400} h={300} bg="#fff" flex="col" gap={16} p={24} />'
+
+# Step 2: Add instances via eval
+node src/index.js eval "(function() {
+  const frame = figma.currentPage.findOne(n => n.name === 'Form');
+  const button = figma.currentPage.findOne(n => n.type === 'COMPONENT' && n.name === 'Button - Primary');
+  if (frame && button) {
+    const instance = button.createInstance();
+    frame.appendChild(instance);
+  }
+  return 'Done';
+})()"
 ```
 
 ### IMPORTANT: Create Elements INSIDE Frames

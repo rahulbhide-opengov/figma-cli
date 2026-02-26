@@ -2,6 +2,40 @@
 
 CLI that controls Figma Desktop directly. No API key needed.
 
+## IMPORTANT: When User Says "Initiate Project"
+
+Run these steps in order:
+
+### Step 1: Install dependencies
+```bash
+npm install
+```
+
+### Step 2: Patch Figma (enables CDP connection)
+```bash
+node src/index.js init
+```
+**Note:** Figma must be completely closed. If permission error, user needs Full Disk Access (see below).
+
+### Step 3: Connect to Figma
+```bash
+node src/index.js connect
+```
+**Note:** Figma Desktop must be running with a design file open.
+
+### Step 4: Show examples
+When connected, show these examples:
+```
+Ready! Try asking:
+
+"Create a blue rectangle"
+"Add Tailwind colors to my file"
+"Create a card with title and description"
+"Check accessibility"
+```
+
+---
+
 ## IMPORTANT: Fresh Mac Setup
 
 If `node` command is not found, install Node.js first:

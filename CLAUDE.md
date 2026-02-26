@@ -2,6 +2,74 @@
 
 CLI that controls Figma Desktop directly. No API key needed.
 
+## IMPORTANT: Creating a Full Webpage in Figma
+
+When user asks to "create a website", "design a landing page", or similar:
+
+### Step 1: Create Design System First
+```bash
+node src/index.js tokens ds
+```
+This creates IDS Base colors: gray, primary (blue), accent (purple), plus semantic colors.
+
+### Step 2: Create Sections Vertically Stacked
+
+**CRITICAL:** Create ONE frame that contains all sections, OR stack sections at same X with increasing Y.
+
+```bash
+# Option A: One frame with all sections inside (RECOMMENDED)
+node src/index.js render '<Frame name="Landing Page" w={1440} flex="col" bg="#0a0a0f">
+  <Frame name="Hero" w="fill" h={800} flex="col" justify="center" items="center" gap={24} p={80}>
+    <Text size={64} weight="bold" color="#fff">Headline</Text>
+    <Text size={20} color="#a1a1aa">Subheadline</Text>
+    <Frame bg="#3b82f6" px={32} py={16} rounded={8}><Text size={16} weight="medium" color="#fff">CTA Button</Text></Frame>
+  </Frame>
+  <Frame name="Features" w="fill" flex="row" gap={40} p={80} bg="#111">
+    <Frame flex="col" gap={12} grow={1}><Text size={24} weight="bold" color="#fff">Feature 1</Text></Frame>
+    <Frame flex="col" gap={12} grow={1}><Text size={24} weight="bold" color="#fff">Feature 2</Text></Frame>
+    <Frame flex="col" gap={12} grow={1}><Text size={24} weight="bold" color="#fff">Feature 3</Text></Frame>
+  </Frame>
+  <Frame name="Footer" w="fill" h={200} flex="col" justify="center" items="center" bg="#0a0a0f">
+    <Text size={14} color="#71717a">© 2024 Company</Text>
+  </Frame>
+</Frame>'
+```
+
+```bash
+# Option B: Separate sections, then stack them
+node src/index.js render '<Frame name="Hero" w={1440} h={800} bg="#0a0a0f" ... />'
+node src/index.js render '<Frame name="Features" w={1440} h={600} bg="#111" ... />'
+node src/index.js render '<Frame name="Footer" w={1440} h={200} bg="#0a0a0f" ... />'
+
+# Then stack vertically:
+node src/index.js eval "(function() {
+  const sections = ['Hero', 'Features', 'Footer'];
+  let y = 0;
+  sections.forEach(name => {
+    const node = figma.currentPage.findOne(n => n.name === name);
+    if (node) { node.x = 0; node.y = y; y += node.height; }
+  });
+  return 'Stacked';
+})()"
+```
+
+### Step 3: Use Variables for Colors
+
+After creating, bind colors to variables:
+```bash
+node src/index.js bind fill "background/default"
+node src/index.js bind fill "primary/500" -n "BUTTON_ID"
+```
+
+### Design Tips for Webpages
+- **Hero:** Full-width, centered content, big headline, CTA button
+- **Sections:** Consistent width (1440px desktop, 375px mobile)
+- **Dark themes:** Use gray/900-950 for backgrounds, gray/100-300 for text
+- **Light themes:** Use white/gray-50 for backgrounds, gray/800-950 for text
+- **Spacing:** Use 80px padding for sections, 24-40px gaps between elements
+
+---
+
 ## IMPORTANT: When User Says "Initiate Project"
 
 Run these steps:

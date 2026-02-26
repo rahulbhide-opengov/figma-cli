@@ -203,15 +203,17 @@ async function handleRequest(req, res) {
               result = await execWithTimeout(() => executeEval(code));
               break;
             case 'render':
-              // Render still uses CDP for now (figma-use dependency)
-              const client = await getCdpClient();
-              result = await execWithTimeout(() => client.render(jsx));
+              // Parse JSX to code, then execute via unified eval (works with both CDP and Plugin)
+              const parser = new FigmaClient();
+              const renderCode = parser.parseJSX(jsx);
+              result = await execWithTimeout(() => executeEval(renderCode));
               break;
             case 'render-batch':
-              const c = await getCdpClient();
+              const batchParser = new FigmaClient();
               result = [];
               for (const j of jsxArray) {
-                result.push(await execWithTimeout(() => c.render(j)));
+                const batchCode = batchParser.parseJSX(j);
+                result.push(await execWithTimeout(() => executeEval(batchCode)));
               }
               break;
             default:

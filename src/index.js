@@ -273,12 +273,18 @@ function figmaEvalSync(code) {
   const daemonRunning = isDaemonRunning();
   if (daemonRunning) {
     try {
-      const payload = JSON.stringify({ action: 'eval', code });
+      // Wrap code to ensure return value for plugin mode
+      // CDP returns last expression automatically, plugin needs explicit return
+      let wrappedCode = code.trim();
+      // Don't wrap if already an IIFE or starts with return - plugin handles these
+      // For simple expressions and multi-statement code, just pass through
+      // The plugin will add return to the last statement
+      const payload = JSON.stringify({ action: 'eval', code: wrappedCode });
       const payloadFile = `/tmp/figma-payload-${Date.now()}.json`;
       writeFileSync(payloadFile, payload);
       const result = execSync(
         `curl -s -X POST http://127.0.0.1:3456/exec -H "Content-Type: application/json" -d @${payloadFile}`,
-        { encoding: 'utf8', timeout: 15000 }
+        { encoding: 'utf8', timeout: 30000 }
       );
       try { unlinkSync(payloadFile); } catch {}
       if (!result || result.trim() === '') {
@@ -288,7 +294,16 @@ function figmaEvalSync(code) {
       if (data.error) throw new Error(data.error);
       return data.result;
     } catch (e) {
-      // Fall through to direct connection
+      // Check if we're in Safe Mode (plugin only) - don't fall through to CDP
+      try {
+        const healthRes = execSync(`curl -s http://127.0.0.1:${DAEMON_PORT}/health`, { encoding: 'utf8', timeout: 2000 });
+        const health = JSON.parse(healthRes);
+        if (health.plugin && !health.cdp) {
+          // Safe Mode - re-throw the error, don't try CDP fallback
+          throw e;
+        }
+      } catch {}
+      // Fall through to direct CDP connection
     }
   }
 
@@ -366,17 +381,19 @@ function figmaUse(args, options = {}) {
   }
 
   if (args === 'variable list') {
-    const result = figmaEvalSync(`
-      figma.variables.getLocalVariables().map(v => v.name + ' (' + v.resolvedType + ')').join('\\n')
-    `);
+    const result = figmaEvalSync(`(async () => {
+      const vars = await figma.variables.getLocalVariablesAsync();
+      return vars.map(v => v.name + ' (' + v.resolvedType + ')').join('\\n');
+    })()`);
     if (!options.silent) console.log(result);
     return result;
   }
 
   if (args === 'collection list') {
-    const result = figmaEvalSync(`
-      figma.variables.getLocalVariableCollections().map(c => c.name + ' (' + c.variableIds.length + ' vars)').join('\\n')
-    `);
+    const result = figmaEvalSync(`(async () => {
+      const cols = await figma.variables.getLocalVariableCollectionsAsync();
+      return cols.map(c => c.name + ' (' + c.variableIds.length + ' vars)').join('\\n');
+    })()`);
     if (!options.silent) console.log(result);
     return result;
   }
@@ -393,21 +410,22 @@ function figmaUse(args, options = {}) {
 
   if (args.startsWith('variable find ')) {
     const pattern = args.replace('variable find ', '').replace(/"/g, '');
-    const result = figmaEvalSync(`
+    const result = figmaEvalSync(`(async () => {
       const pattern = '${pattern}'.replace('*', '.*');
       const re = new RegExp(pattern, 'i');
-      figma.variables.getLocalVariables().filter(v => re.test(v.name)).map(v => v.name).join('\\n')
-    `);
+      const vars = await figma.variables.getLocalVariablesAsync();
+      return vars.filter(v => re.test(v.name)).map(v => v.name).join('\\n');
+    })()`);
     if (!options.silent) console.log(result);
     return result;
   }
 
   if (args.startsWith('select ')) {
     const nodeId = args.replace('select ', '').replace(/"/g, '');
-    figmaEvalSync(`
-      const node = figma.getNodeById('${nodeId}');
+    figmaEvalSync(`(async () => {
+      const node = await figma.getNodeByIdAsync('${nodeId}');
       if (node) figma.currentPage.selection = [node];
-    `);
+    })()`);
     return 'Selected';
   }
 
@@ -471,9 +489,20 @@ function isFigmaPatched() {
   return config.patched === true;
 }
 
-// Helper: Hex to Figma RGB
+// Helper: Hex to Figma RGB (handles both #RGB and #RRGGBB)
 function hexToRgb(hex) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  // Remove # if present
+  hex = hex.replace(/^#/, '');
+
+  // Expand 3-char hex to 6-char
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+
+  const result = /^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) {
+    throw new Error(`Invalid hex color: #${hex}`);
+  }
   return {
     r: parseInt(result[1], 16) / 255,
     g: parseInt(result[2], 16) / 255,
@@ -1002,14 +1031,38 @@ variables
 variables
   .command('create <name>')
   .description('Create a variable')
-  .requiredOption('-c, --collection <id>', 'Collection ID')
+  .requiredOption('-c, --collection <id>', 'Collection ID or name')
   .requiredOption('-t, --type <type>', 'Type: COLOR, FLOAT, STRING, BOOLEAN')
   .option('-v, --value <value>', 'Initial value')
   .action((name, options) => {
     checkConnection();
-    let cmd = `variable create "${name}" --collection "${options.collection}" --type ${options.type}`;
-    if (options.value) cmd += ` --value "${options.value}"`;
-    figmaUse(cmd);
+    const type = options.type.toUpperCase();
+    const code = `(async () => {
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.id === '${options.collection}' || c.name === '${options.collection}');
+if (!col) return 'Collection not found: ${options.collection}';
+const modeId = col.modes[0].modeId;
+
+function hexToRgb(hex) {
+  const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16) / 255,
+    g: parseInt(result[2], 16) / 255,
+    b: parseInt(result[3], 16) / 255
+  } : null;
+}
+
+const v = figma.variables.createVariable('${name}', col, '${type}');
+${options.value ? `
+let figmaValue = '${options.value}';
+if ('${type}' === 'COLOR') figmaValue = hexToRgb('${options.value}');
+else if ('${type}' === 'FLOAT') figmaValue = parseFloat('${options.value}');
+else if ('${type}' === 'BOOLEAN') figmaValue = '${options.value}' === 'true';
+v.setValueForMode(modeId, figmaValue);
+` : ''}
+return 'Created ${type.toLowerCase()} variable: ${name}';
+})()`;
+    figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
 variables
@@ -1166,28 +1219,30 @@ tokens
       rose: { 50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af', 400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c', 800: '#9f1239', 900: '#881337', 950: '#4c0519' }
     };
 
-    const code = `
+    const code = `(async () => {
 const colors = ${JSON.stringify(tailwindColors)};
 function hexToRgb(hex) {
   const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
   return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
 }
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === '${options.collection}');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === '${options.collection}');
 if (!col) col = figma.variables.createVariableCollection('${options.collection}');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(colors).forEach(([colorName, shades]) => {
-  Object.entries(shades).forEach(([shade, hex]) => {
-    const existing = figma.variables.getLocalVariables().find(v => v.name === colorName + '/' + shade);
+for (const [colorName, shades] of Object.entries(colors)) {
+  for (const [shade, hex] of Object.entries(shades)) {
+    const existing = existingVars.find(v => v.name === colorName + '/' + shade);
     if (!existing) {
-      const v = figma.variables.createVariable(colorName + '/' + shade, col.id, 'COLOR');
+      const v = figma.variables.createVariable(colorName + '/' + shade, col, 'COLOR');
       v.setValueForMode(modeId, hexToRgb(hex));
       count++;
     }
-  });
-});
-'Created ' + count + ' color variables in ${options.collection}'
-`;
+  }
+}
+return 'Created ' + count + ' color variables in ${options.collection}';
+})()`;
 
     try {
       const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
@@ -1232,28 +1287,30 @@ tokens
       rose: { 50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af', 400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c', 800: '#9f1239', 900: '#881337', 950: '#4c0519' }
     };
 
-    const code = `
+    const code = `(async () => {
 const colors = ${JSON.stringify(shadcnColors)};
 function hexToRgb(hex) {
   const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
   return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
 }
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === '${options.collection}');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === '${options.collection}');
 if (!col) col = figma.variables.createVariableCollection('${options.collection}');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(colors).forEach(([colorName, shades]) => {
-  Object.entries(shades).forEach(([shade, hex]) => {
-    const existing = figma.variables.getLocalVariables().find(v => v.name === colorName + '/' + shade);
+for (const [colorName, shades] of Object.entries(colors)) {
+  for (const [shade, hex] of Object.entries(shades)) {
+    const existing = existingVars.find(v => v.name === colorName + '/' + shade);
     if (!existing) {
-      const v = figma.variables.createVariable(colorName + '/' + shade, col.id, 'COLOR');
+      const v = figma.variables.createVariable(colorName + '/' + shade, col, 'COLOR');
       v.setValueForMode(modeId, hexToRgb(hex));
       count++;
     }
-  });
-});
-'Created ' + count + ' shadcn color variables in ${options.collection}'
-`;
+  }
+}
+return 'Created ' + count + ' shadcn color variables in ${options.collection}';
+})()`;
 
     try {
       const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
@@ -1280,22 +1337,24 @@ tokens
       '32': 128, '36': 144, '40': 160, '44': 176, '48': 192
     };
 
-    const code = `
+    const code = `(async () => {
 const spacings = ${JSON.stringify(spacings)};
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === '${options.collection}');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === '${options.collection}');
 if (!col) col = figma.variables.createVariableCollection('${options.collection}');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(spacings).forEach(([name, value]) => {
-  const existing = figma.variables.getLocalVariables().find(v => v.name === 'spacing/' + name);
+for (const [name, value] of Object.entries(spacings)) {
+  const existing = existingVars.find(v => v.name === 'spacing/' + name);
   if (!existing) {
-    const v = figma.variables.createVariable('spacing/' + name, col.id, 'FLOAT');
+    const v = figma.variables.createVariable('spacing/' + name, col, 'FLOAT');
     v.setValueForMode(modeId, value);
     count++;
   }
-});
-'Created ' + count + ' spacing variables'
-`;
+}
+return 'Created ' + count + ' spacing variables';
+})()`;
 
     try {
       const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
@@ -1318,21 +1377,24 @@ tokens
       'xl': 12, '2xl': 16, '3xl': 24, 'full': 9999
     };
 
-    const code = `
+    const code = `(async () => {
 const radii = ${JSON.stringify(radii)};
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === '${options.collection}');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === '${options.collection}');
 if (!col) col = figma.variables.createVariableCollection('${options.collection}');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(radii).forEach(([name, value]) => {
-  const existing = figma.variables.getLocalVariables().find(v => v.name === 'radius/' + name);
+for (const [name, value] of Object.entries(radii)) {
+  const existing = existingVars.find(v => v.name === 'radius/' + name);
   if (!existing) {
-    const v = figma.variables.createVariable('radius/' + name, col.id, 'FLOAT');
+    const v = figma.variables.createVariable('radius/' + name, col, 'FLOAT');
     v.setValueForMode(modeId, value);
     count++;
   }
-});
-'Created ' + count + ' radius variables'
+}
+return 'Created ' + count + ' radius variables';
+})()
 `;
 
     try {
@@ -1366,7 +1428,7 @@ tokens
     // Support: { "colors": { "primary": "#xxx" } } or { "primary": { "value": "#xxx", "type": "color" } }
     const collectionName = options.collection || 'Imported Tokens';
 
-    const code = `
+    const code = `(async () => {
 const data = ${JSON.stringify(tokensData)};
 const collectionName = '${collectionName}';
 
@@ -1398,19 +1460,21 @@ function flattenTokens(obj, prefix = '') {
   return result;
 }
 
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === collectionName);
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === collectionName);
 if (!col) col = figma.variables.createVariableCollection(collectionName);
 const modeId = col.modes[0].modeId;
 
+const existingVars = await figma.variables.getLocalVariablesAsync();
 const tokens = flattenTokens(data);
 let count = 0;
 
-tokens.forEach(({ name, value, type }) => {
-  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+for (const { name, value, type } of tokens) {
+  const existing = existingVars.find(v => v.name === name);
   if (!existing) {
     try {
       const figmaType = type === 'COLOR' ? 'COLOR' : type === 'FLOAT' || type === 'NUMBER' ? 'FLOAT' : type === 'BOOLEAN' ? 'BOOLEAN' : 'STRING';
-      const v = figma.variables.createVariable(name, col.id, figmaType);
+      const v = figma.variables.createVariable(name, col, figmaType);
       let figmaValue = value;
       if (figmaType === 'COLOR') figmaValue = hexToRgb(value);
       if (figmaValue !== null) {
@@ -1419,10 +1483,10 @@ tokens.forEach(({ name, value, type }) => {
       }
     } catch (e) {}
   }
-});
+}
 
-'Imported ' + count + ' tokens into ' + collectionName
-`;
+return 'Imported ' + count + ' tokens into ' + collectionName;
+})()`;
 
     try {
       const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
@@ -1484,28 +1548,30 @@ tokens
 
     // Create Color - Primitives
     let spinner = ora('Creating Color - Primitives...').start();
-    const primitivesCode = `
+    const primitivesCode = `(async () => {
 const colors = ${JSON.stringify(idsColors)};
 function hexToRgb(hex) {
   const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
   return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
 }
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Color - Primitives');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === 'Color - Primitives');
 if (!col) col = figma.variables.createVariableCollection('Color - Primitives');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(colors).forEach(([colorName, shades]) => {
-  Object.entries(shades).forEach(([shade, hex]) => {
-    const existing = figma.variables.getLocalVariables().find(v => v.name === colorName + '/' + shade);
+for (const [colorName, shades] of Object.entries(colors)) {
+  for (const [shade, hex] of Object.entries(shades)) {
+    const existing = existingVars.find(v => v.name === colorName + '/' + shade);
     if (!existing) {
-      const v = figma.variables.createVariable(colorName + '/' + shade, col.id, 'COLOR');
+      const v = figma.variables.createVariable(colorName + '/' + shade, col, 'COLOR');
       v.setValueForMode(modeId, hexToRgb(hex));
       count++;
     }
-  });
-});
-count
-`;
+  }
+}
+return count;
+})()`;
     try {
       const result = figmaUse(`eval "${primitivesCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
       spinner.succeed(`Color - Primitives (${result?.trim() || '33'} variables)`);
@@ -1513,26 +1579,28 @@ count
 
     // Create Color - Semantic
     spinner = ora('Creating Color - Semantic...').start();
-    const semanticCode = `
+    const semanticCode = `(async () => {
 const colors = ${JSON.stringify(idsSemanticColors)};
 function hexToRgb(hex) {
   const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
   return { r: parseInt(r[1], 16) / 255, g: parseInt(r[2], 16) / 255, b: parseInt(r[3], 16) / 255 };
 }
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Color - Semantic');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === 'Color - Semantic');
 if (!col) col = figma.variables.createVariableCollection('Color - Semantic');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(colors).forEach(([name, hex]) => {
-  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+for (const [name, hex] of Object.entries(colors)) {
+  const existing = existingVars.find(v => v.name === name);
   if (!existing) {
-    const v = figma.variables.createVariable(name, col.id, 'COLOR');
+    const v = figma.variables.createVariable(name, col, 'COLOR');
     v.setValueForMode(modeId, hexToRgb(hex));
     count++;
   }
-});
-count
-`;
+}
+return count;
+})()`;
     try {
       const result = figmaUse(`eval "${semanticCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
       spinner.succeed(`Color - Semantic (${result?.trim() || '13'} variables)`);
@@ -1540,22 +1608,24 @@ count
 
     // Create Spacing
     spinner = ora('Creating Spacing...').start();
-    const spacingCode = `
+    const spacingCode = `(async () => {
 const spacings = ${JSON.stringify(idsSpacing)};
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Spacing');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === 'Spacing');
 if (!col) col = figma.variables.createVariableCollection('Spacing');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(spacings).forEach(([name, value]) => {
-  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+for (const [name, value] of Object.entries(spacings)) {
+  const existing = existingVars.find(v => v.name === name);
   if (!existing) {
-    const v = figma.variables.createVariable(name, col.id, 'FLOAT');
+    const v = figma.variables.createVariable(name, col, 'FLOAT');
     v.setValueForMode(modeId, value);
     count++;
   }
-});
-count
-`;
+}
+return count;
+})()`;
     try {
       const result = figmaUse(`eval "${spacingCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
       spinner.succeed(`Spacing (${result?.trim() || '7'} variables)`);
@@ -1563,22 +1633,24 @@ count
 
     // Create Typography
     spinner = ora('Creating Typography...').start();
-    const typographyCode = `
+    const typographyCode = `(async () => {
 const typography = ${JSON.stringify(idsTypography)};
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Typography');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === 'Typography');
 if (!col) col = figma.variables.createVariableCollection('Typography');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(typography).forEach(([name, value]) => {
-  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+for (const [name, value] of Object.entries(typography)) {
+  const existing = existingVars.find(v => v.name === name);
   if (!existing) {
-    const v = figma.variables.createVariable(name, col.id, 'FLOAT');
+    const v = figma.variables.createVariable(name, col, 'FLOAT');
     v.setValueForMode(modeId, value);
     count++;
   }
-});
-count
-`;
+}
+return count;
+})()`;
     try {
       const result = figmaUse(`eval "${typographyCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
       spinner.succeed(`Typography (${result?.trim() || '12'} variables)`);
@@ -1586,22 +1658,24 @@ count
 
     // Create Border Radii
     spinner = ora('Creating Border Radii...').start();
-    const radiiCode = `
+    const radiiCode = `(async () => {
 const radii = ${JSON.stringify(idsRadii)};
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === 'Border Radii');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === 'Border Radii');
 if (!col) col = figma.variables.createVariableCollection('Border Radii');
 const modeId = col.modes[0].modeId;
+const existingVars = await figma.variables.getLocalVariablesAsync();
 let count = 0;
-Object.entries(radii).forEach(([name, value]) => {
-  const existing = figma.variables.getLocalVariables().find(v => v.name === name);
+for (const [name, value] of Object.entries(radii)) {
+  const existing = existingVars.find(v => v.name === name);
   if (!existing) {
-    const v = figma.variables.createVariable(name, col.id, 'FLOAT');
+    const v = figma.variables.createVariable(name, col, 'FLOAT');
     v.setValueForMode(modeId, value);
     count++;
   }
-});
-count
-`;
+}
+return count;
+})()`;
     try {
       const result = figmaUse(`eval "${radiiCode.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
       spinner.succeed(`Border Radii (${result?.trim() || '6'} variables)`);
@@ -1754,7 +1828,7 @@ tokens
   .action((name, value, options) => {
     checkConnection();
 
-    const code = `
+    const code = `(async () => {
 function hexToRgb(hex) {
   const r = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
   if (!r) return null;
@@ -1770,19 +1844,20 @@ if (!type) {
   else type = 'STRING';
 }
 
-let col = figma.variables.getLocalVariableCollections().find(c => c.name === '${options.collection}');
+const cols = await figma.variables.getLocalVariableCollectionsAsync();
+let col = cols.find(c => c.name === '${options.collection}');
 if (!col) col = figma.variables.createVariableCollection('${options.collection}');
 const modeId = col.modes[0].modeId;
 
-const v = figma.variables.createVariable('${name}', col.id, type);
+const v = figma.variables.createVariable('${name}', col, type);
 let figmaValue = value;
 if (type === 'COLOR') figmaValue = hexToRgb(value);
 else if (type === 'FLOAT') figmaValue = parseFloat(value);
 else if (type === 'BOOLEAN') figmaValue = value === 'true';
 v.setValueForMode(modeId, figmaValue);
 
-'Created ' + type.toLowerCase() + ' token: ${name}'
-`;
+return 'Created ' + type.toLowerCase() + ' token: ${name}';
+})()`;
 
     try {
       const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
@@ -1846,27 +1921,27 @@ create
   .option('--spacing <n>', 'Gap from other elements', '100')
   .action((name, options) => {
     checkConnection();
-    const useSmartPos = options.x === undefined;
-    if (useSmartPos) {
-      // First create icon at 0,0, then move it to smart position
-      const code = `
-${smartPosCode(options.spacing)}
-const icon = figma.currentPage.selection[0];
-if (icon) {
-  icon.x = smartX;
-  icon.y = ${options.y};
-  'Icon moved to (' + smartX + ', ${options.y})';
-} else {
-  'No icon selected';
-}
-`;
-      figmaUse(`create icon ${name} --size ${options.size} --color "${options.color}"`);
-      // Move to smart position after creation
-      setTimeout(() => {
-        figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
-      }, 500);
-    } else {
-      figmaUse(`create icon ${name} --size ${options.size} --color "${options.color}" -x ${options.x} -y ${options.y}`);
+
+    // Use render command with <Icon> JSX (works in both Safe and Yolo mode)
+    const posX = options.x !== undefined ? options.x : getNextFreeX(parseInt(options.spacing) || 100);
+    const posY = parseInt(options.y) || 0;
+
+    const jsx = `<Icon name="${name}" size={${options.size}} color="${options.color}" />`;
+
+    // Use render with explicit position
+    const cmd = `npx figma-use render --stdin --json --x ${posX} --y ${posY}`;
+    try {
+      const output = execSync(cmd, {
+        input: jsx,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 30000
+      });
+      const result = JSON.parse(output);
+      console.log(chalk.green('✓ Created icon: ') + name);
+      console.log(chalk.gray(`  Position: (${posX}, ${posY}), Size: ${options.size}px`));
+    } catch (error) {
+      console.error(chalk.red('Error creating icon:'), error.message);
     }
   });
 
@@ -2855,10 +2930,10 @@ canvas
   .description('Show canvas info (bounds, element count, free space)')
   .action(() => {
     checkConnection();
-    let code = `
+    let code = `(function() {
 const children = figma.currentPage.children;
 if (children.length === 0) {
-  JSON.stringify({ empty: true, message: 'Canvas is empty', nextX: 0, nextY: 0 });
+  return JSON.stringify({ empty: true, message: 'Canvas is empty', nextX: 0, nextY: 0 });
 } else {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   children.forEach(n => {
@@ -2867,7 +2942,7 @@ if (children.length === 0) {
     maxX = Math.max(maxX, n.x + n.width);
     maxY = Math.max(maxY, n.y + n.height);
   });
-  JSON.stringify({
+  return JSON.stringify({
     elements: children.length,
     bounds: { x: Math.round(minX), y: Math.round(minY), width: Math.round(maxX - minX), height: Math.round(maxY - minY) },
     nextX: Math.round(maxX + 100),
@@ -2876,7 +2951,7 @@ if (children.length === 0) {
     components: children.filter(n => n.type === 'COMPONENT').length
   }, null, 2);
 }
-`;
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -2920,23 +2995,22 @@ bind
   .action((varName, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
-    let code = `
+    let code = `(async () => {
 ${nodeSelector}
-const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
-if (!v) 'Variable not found: ${varName}';
-else if (nodes.length === 0) 'No node selected';
-else {
-  nodes.forEach(n => {
-    if ('fills' in n && n.fills.length > 0) {
-      const newFill = figma.variables.setBoundVariableForPaint(n.fills[0], 'color', v);
-      n.fills = [newFill];
-    }
-  });
-  'Bound ' + v.name + ' to fill on ' + nodes.length + ' elements';
-}
-`;
+const vars = await figma.variables.getLocalVariablesAsync();
+const v = vars.find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) return 'Variable not found: ${varName}';
+if (nodes.length === 0) return 'No node selected';
+nodes.forEach(n => {
+  if ('fills' in n && n.fills.length > 0) {
+    const newFill = figma.variables.setBoundVariableForPaint(n.fills[0], 'color', v);
+    n.fills = [newFill];
+  }
+});
+return 'Bound ' + v.name + ' to fill on ' + nodes.length + ' elements';
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -2947,24 +3021,23 @@ bind
   .action((varName, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
-    let code = `
+    let code = `(async () => {
 ${nodeSelector}
-const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
-if (!v) 'Variable not found: ${varName}';
-else if (nodes.length === 0) 'No node selected';
-else {
-  nodes.forEach(n => {
-    if ('strokes' in n) {
-      const stroke = n.strokes[0] || { type: 'SOLID', color: {r:0,g:0,b:0} };
-      const newStroke = figma.variables.setBoundVariableForPaint(stroke, 'color', v);
-      n.strokes = [newStroke];
-    }
-  });
-  'Bound ' + v.name + ' to stroke on ' + nodes.length + ' elements';
-}
-`;
+const vars = await figma.variables.getLocalVariablesAsync();
+const v = vars.find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) return 'Variable not found: ${varName}';
+if (nodes.length === 0) return 'No node selected';
+nodes.forEach(n => {
+  if ('strokes' in n) {
+    const stroke = n.strokes[0] || { type: 'SOLID', color: {r:0,g:0,b:0} };
+    const newStroke = figma.variables.setBoundVariableForPaint(stroke, 'color', v);
+    n.strokes = [newStroke];
+  }
+});
+return 'Bound ' + v.name + ' to stroke on ' + nodes.length + ' elements';
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -2975,20 +3048,19 @@ bind
   .action((varName, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
-    let code = `
+    let code = `(async () => {
 ${nodeSelector}
-const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
-if (!v) 'Variable not found: ${varName}';
-else if (nodes.length === 0) 'No node selected';
-else {
-  nodes.forEach(n => {
-    if ('cornerRadius' in n) n.setBoundVariable('cornerRadius', v);
-  });
-  'Bound ' + v.name + ' to radius on ' + nodes.length + ' elements';
-}
-`;
+const vars = await figma.variables.getLocalVariablesAsync();
+const v = vars.find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) return 'Variable not found: ${varName}';
+if (nodes.length === 0) return 'No node selected';
+nodes.forEach(n => {
+  if ('cornerRadius' in n) n.setBoundVariable('cornerRadius', v);
+});
+return 'Bound ' + v.name + ' to radius on ' + nodes.length + ' elements';
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -2999,20 +3071,19 @@ bind
   .action((varName, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
-    let code = `
+    let code = `(async () => {
 ${nodeSelector}
-const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
-if (!v) 'Variable not found: ${varName}';
-else if (nodes.length === 0) 'No node selected';
-else {
-  nodes.forEach(n => {
-    if ('itemSpacing' in n) n.setBoundVariable('itemSpacing', v);
-  });
-  'Bound ' + v.name + ' to gap on ' + nodes.length + ' elements';
-}
-`;
+const vars = await figma.variables.getLocalVariablesAsync();
+const v = vars.find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) return 'Variable not found: ${varName}';
+if (nodes.length === 0) return 'No node selected';
+nodes.forEach(n => {
+  if ('itemSpacing' in n) n.setBoundVariable('itemSpacing', v);
+});
+return 'Bound ' + v.name + ' to gap on ' + nodes.length + ' elements';
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -3024,24 +3095,23 @@ bind
   .action((varName, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     const sides = options.side === 'all'
       ? ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']
       : [`padding${options.side.charAt(0).toUpperCase() + options.side.slice(1)}`];
-    let code = `
+    let code = `(async () => {
 ${nodeSelector}
-const v = figma.variables.getLocalVariables().find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
-if (!v) 'Variable not found: ${varName}';
-else if (nodes.length === 0) 'No node selected';
-else {
-  const sides = ${JSON.stringify(sides)};
-  nodes.forEach(n => {
-    sides.forEach(side => { if (side in n) n.setBoundVariable(side, v); });
-  });
-  'Bound ' + v.name + ' to padding on ' + nodes.length + ' elements';
-}
-`;
+const vars = await figma.variables.getLocalVariablesAsync();
+const v = vars.find(v => v.name === '${varName}' || v.name.endsWith('/${varName}'));
+if (!v) return 'Variable not found: ${varName}';
+if (nodes.length === 0) return 'No node selected';
+const sides = ${JSON.stringify(sides)};
+nodes.forEach(n => {
+  sides.forEach(side => { if (side in n) n.setBoundVariable(side, v); });
+});
+return 'Bound ' + v.name + ' to padding on ' + nodes.length + ' elements';
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -3051,11 +3121,11 @@ bind
   .option('-t, --type <type>', 'Filter: COLOR, FLOAT')
   .action((options) => {
     checkConnection();
-    let code = `
-const vars = figma.variables.getLocalVariables();
+    let code = `(async () => {
+const vars = await figma.variables.getLocalVariablesAsync();
 const filtered = vars${options.type ? `.filter(v => v.resolvedType === '${options.type.toUpperCase()}')` : ''};
-filtered.map(v => v.resolvedType.padEnd(8) + ' ' + v.name).join('\\n') || 'No variables';
-`;
+return filtered.map(v => v.resolvedType.padEnd(8) + ' ' + v.name).join('\\n') || 'No variables';
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -3211,10 +3281,10 @@ program
   .action((nodeId) => {
     checkConnection();
     if (nodeId) {
-      let code = `
-const node = figma.getNodeById('${nodeId}');
-if (node) { node.remove(); 'Deleted: ${nodeId}'; } else { 'Node not found: ${nodeId}'; }
-`;
+      let code = `(async () => {
+const node = await figma.getNodeByIdAsync('${nodeId}');
+if (node) { node.remove(); return 'Deleted: ${nodeId}'; } else { return 'Node not found: ${nodeId}'; }
+})()`;
       figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
     } else {
       let code = `
@@ -3236,10 +3306,10 @@ program
   .action((nodeId, options) => {
     checkConnection();
     if (nodeId) {
-      let code = `
-const node = figma.getNodeById('${nodeId}');
-if (node) { const clone = node.clone(); clone.x += ${options.offset}; clone.y += ${options.offset}; figma.currentPage.selection = [clone]; 'Duplicated: ' + clone.id; } else { 'Node not found'; }
-`;
+      let code = `(async () => {
+const node = await figma.getNodeByIdAsync('${nodeId}');
+if (node) { const clone = node.clone(); clone.x += ${options.offset}; clone.y += ${options.offset}; figma.currentPage.selection = [clone]; return 'Duplicated: ' + clone.id; } else { return 'Node not found'; }
+})()`;
       figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
     } else {
       let code = `
@@ -3265,7 +3335,7 @@ set
     checkConnection();
     const { r, g, b } = hexToRgb(color);
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     let code = `
 ${nodeSelector}
@@ -3284,7 +3354,7 @@ set
     checkConnection();
     const { r, g, b } = hexToRgb(color);
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     let code = `
 ${nodeSelector}
@@ -3301,7 +3371,7 @@ set
   .action((value, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     let code = `
 ${nodeSelector}
@@ -3318,7 +3388,7 @@ set
   .action((width, height, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     let code = `
 ${nodeSelector}
@@ -3336,7 +3406,7 @@ set
   .action((x, y, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     let code = `
 ${nodeSelector}
@@ -3353,7 +3423,7 @@ set
   .action((value, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     let code = `
 ${nodeSelector}
@@ -3370,7 +3440,7 @@ set
   .action((name, options) => {
     checkConnection();
     const nodeSelector = options.node
-      ? `const nodes = [figma.getNodeById('${options.node}')].filter(Boolean);`
+      ? `const node = await figma.getNodeByIdAsync('${options.node}'); const nodes = node ? [node] : [];`
       : `const nodes = figma.currentPage.selection;`;
     let code = `
 ${nodeSelector}
@@ -3452,12 +3522,12 @@ program
   .action((nodeId) => {
     checkConnection();
     const nodeSelector = nodeId
-      ? `const node = figma.getNodeById('${nodeId}');`
+      ? `const node = await figma.getNodeByIdAsync('${nodeId}');`
       : `const node = figma.currentPage.selection[0];`;
-    let code = `
+    let code = `(async () => {
 ${nodeSelector}
-if (!node) 'No node found';
-else JSON.stringify({
+if (!node) return 'No node found';
+return JSON.stringify({
   id: node.id,
   name: node.name,
   type: node.type,
@@ -3474,8 +3544,8 @@ else JSON.stringify({
   fills: node.fills?.length,
   strokes: node.strokes?.length,
   children: node.children?.length
-}, null, 2)
-`;
+}, null, 2);
+})()`;
     figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: false });
   });
 
@@ -3615,10 +3685,10 @@ program
           // Get size of created frame for next position
           try {
             if (vertical) {
-              const height = figmaEvalSync(`(function() { const n = figma.getNodeById('${result.id}'); return n ? n.height : 200; })()`);
+              const height = figmaEvalSync(`(async () => { const n = await figma.getNodeByIdAsync('${result.id}'); return n ? n.height : 200; })()`);
               currentY += (height || 200) + gap;
             } else {
-              const width = figmaEvalSync(`(function() { const n = figma.getNodeById('${result.id}'); return n ? n.width : 300; })()`);
+              const width = figmaEvalSync(`(async () => { const n = await figma.getNodeByIdAsync('${result.id}'); return n ? n.width : 300; })()`);
               currentX += (width || 300) + gap;
             }
           } catch {
@@ -3656,8 +3726,8 @@ exp
   .description('Export variables as CSS custom properties')
   .action(() => {
     checkConnection();
-    const code = `
-const vars = figma.variables.getLocalVariables();
+    const code = `(async () => {
+const vars = await figma.variables.getLocalVariablesAsync();
 const css = vars.map(v => {
   const val = Object.values(v.valuesByMode)[0];
   if (v.resolvedType === 'COLOR') {
@@ -3666,8 +3736,8 @@ const css = vars.map(v => {
   }
   return '  --' + v.name.replace(/\\//g, '-') + ': ' + val + (v.resolvedType === 'FLOAT' ? 'px' : '') + ';';
 }).join('\\n');
-':root {\\n' + css + '\\n}'
-`;
+return ':root {\\n' + css + '\\n}';
+})()`;
     const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
     console.log(result);
   });
@@ -3677,10 +3747,11 @@ exp
   .description('Export color variables as Tailwind config')
   .action(() => {
     checkConnection();
-    const code = `
-const vars = figma.variables.getLocalVariables().filter(v => v.resolvedType === 'COLOR');
+    const code = `(async () => {
+const vars = await figma.variables.getLocalVariablesAsync();
+const colorVars = vars.filter(v => v.resolvedType === 'COLOR');
 const colors = {};
-vars.forEach(v => {
+colorVars.forEach(v => {
   const val = Object.values(v.valuesByMode)[0];
   const hex = '#' + [val.r, val.g, val.b].map(n => Math.round(n*255).toString(16).padStart(2,'0')).join('');
   const parts = v.name.split('/');
@@ -3691,8 +3762,8 @@ vars.forEach(v => {
     colors[v.name.replace(/\\//g, '-')] = hex;
   }
 });
-JSON.stringify({ theme: { extend: { colors } } }, null, 2)
-`;
+return JSON.stringify({ theme: { extend: { colors } } }, null, 2);
+})()`;
     const result = figmaUse(`eval "${code.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { silent: true });
     console.log(result);
   });
@@ -3721,7 +3792,15 @@ program
       return;
     }
 
-    figmaUse(`eval "${jsCode.replace(/"/g, '\\"')}"`);
+    // Call figmaEvalSync directly for cleaner execution
+    try {
+      const result = figmaEvalSync(jsCode);
+      if (result !== undefined && result !== null) {
+        console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+      }
+    } catch (error) {
+      console.log(chalk.red('✗ ' + error.message));
+    }
   });
 
 // Run command - alias for eval --file

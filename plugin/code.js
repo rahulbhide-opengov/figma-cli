@@ -17,10 +17,30 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'eval') {
     try {
       // Create async function to support await in eval code
-      // Auto-return last expression if no explicit return
+      // Auto-return: add 'return' for expressions that should return a value
       let code = msg.code.trim();
-      if (!code.includes('return ') && !code.includes(';')) {
-        code = `return ${code}`;
+
+      // Don't add return if code already starts with return
+      if (!code.startsWith('return ')) {
+        // Add return for: simple expressions, IIFEs, arrow IIFEs
+        const isSimpleExpr = !code.includes(';');
+        const isIIFE = code.startsWith('(function') || code.startsWith('(async function');
+        const isArrowIIFE = code.startsWith('(() =>') || code.startsWith('(async () =>');
+
+        if (isSimpleExpr || isIIFE || isArrowIIFE) {
+          code = `return ${code}`;
+        } else {
+          // Multi-statement code: add return to the last statement
+          // Find last statement and add return before it
+          const lastSemicolon = code.lastIndexOf(';');
+          if (lastSemicolon !== -1) {
+            const beforeLast = code.substring(0, lastSemicolon + 1);
+            const lastStmt = code.substring(lastSemicolon + 1).trim();
+            if (lastStmt && !lastStmt.startsWith('return ')) {
+              code = beforeLast + ' return ' + lastStmt;
+            }
+          }
+        }
       }
       const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
       const fn = new AsyncFunction('figma', `return (async () => { ${code} })()`);

@@ -79,16 +79,22 @@ claude
 ### 2. Paste this and hit Enter
 
 ```
-Help me install https://github.com/silships/figma-cli
+Help me install https://github.com/silships/figma-cli and connect to Figma
 ```
 
-### 3. After installation, say:
+**Done.** Claude clones the repo, installs dependencies, and connects to Figma.
 
-```
-Connect to Figma
+---
+
+### Returning Users
+
+Next time, open the folder and start Claude:
+
+```bash
+cd figma-cli && claude
 ```
 
-**Done.** Now you can talk to Claude about your Figma file.
+Then say: `Connect to Figma`
 
 ---
 

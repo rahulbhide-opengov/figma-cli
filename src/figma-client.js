@@ -13,6 +13,7 @@ export class FigmaClient {
     this.msgId = 0;
     this.callbacks = new Map();
     this.pageTitle = null;
+    this.executionContextId = null; // For Figma v39+ sandboxed context
   }
 
   /**
@@ -68,15 +69,61 @@ export class FigmaClient {
 
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(page.webSocketDebuggerUrl);
+      const executionContexts = [];
 
-      this.ws.on('open', () => {
-        // No need for Runtime.enable or context discovery
-        // figma object is available directly
-        resolve(this);
+      this.ws.on('open', async () => {
+        try {
+          // Enable Runtime to discover execution contexts (needed for Figma v39+)
+          await this.send('Runtime.enable');
+
+          // Give time for context events to arrive
+          await new Promise(r => setTimeout(r, 500));
+
+          // First try default context (works on older Figma versions)
+          const defaultCheck = await this.send('Runtime.evaluate', {
+            expression: 'typeof figma !== "undefined"',
+            returnByValue: true
+          });
+
+          if (defaultCheck.result?.result?.value === true) {
+            // figma is in default context (older Figma)
+            this.executionContextId = null;
+            resolve(this);
+            return;
+          }
+
+          // Figma v39+: search all execution contexts for figma
+          for (const ctx of executionContexts) {
+            try {
+              const check = await this.send('Runtime.evaluate', {
+                expression: 'typeof figma !== "undefined"',
+                contextId: ctx.id,
+                returnByValue: true
+              });
+
+              if (check.result?.result?.value === true) {
+                this.executionContextId = ctx.id;
+                resolve(this);
+                return;
+              }
+            } catch {
+              // Context may have been destroyed, skip
+            }
+          }
+
+          reject(new Error('Could not find Figma execution context. Make sure a design file is open.'));
+        } catch (err) {
+          reject(err);
+        }
       });
 
       this.ws.on('message', (data) => {
         const msg = JSON.parse(data);
+
+        // Collect execution contexts as they're created
+        if (msg.method === 'Runtime.executionContextCreated') {
+          executionContexts.push(msg.params.context);
+        }
 
         if (msg.id && this.callbacks.has(msg.id)) {
           this.callbacks.get(msg.id)(msg);
@@ -86,7 +133,7 @@ export class FigmaClient {
 
       this.ws.on('error', reject);
 
-      setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      setTimeout(() => reject(new Error('Connection timeout')), 15000);
     });
   }
 
@@ -106,11 +153,18 @@ export class FigmaClient {
       throw new Error('Not connected to Figma');
     }
 
-    const result = await this.send('Runtime.evaluate', {
+    const params = {
       expression,
       returnByValue: true,
       awaitPromise: true
-    });
+    };
+
+    // Use specific execution context if found (Figma v39+)
+    if (this.executionContextId) {
+      params.contextId = this.executionContextId;
+    }
+
+    const result = await this.send('Runtime.evaluate', params);
 
     if (result.result?.exceptionDetails) {
       const error = result.result.exceptionDetails;

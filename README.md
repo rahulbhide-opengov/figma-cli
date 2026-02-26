@@ -41,7 +41,7 @@ Other tools require MCP servers, API keys, or complex setup. This one doesn't.
 
 | | figma-ds-cli | MCP-based tools |
 |---|---|---|
-| **Setup** | Download ZIP, run `claude`, done | Configure MCP server + client |
+| **Setup** | Paste link in Claude, done | Configure MCP server + client |
 | **API Key** | Not needed | Personal Access Token or OAuth |
 | **Claude Code** | Just run `claude` | Manual MCP configuration |
 | **AI Knowledge** | `CLAUDE.md` included, AI knows everything | Teach AI manually |
@@ -68,64 +68,37 @@ No explaining. No teaching. Just ask.
 
 ---
 
-## Setup (4 Steps)
+## Setup (30 seconds)
 
-### Step 1: Download
-
-Click the green **Code** button above → **Download ZIP**. Unzip it.
-
-### Step 2: Open Terminal
-
-On Mac: Open Terminal (Spotlight → type "Terminal")
-
-Navigate to the folder:
-
-```bash
-cd ~/Downloads/figma-cli-main
-```
-
-### Step 3: Start Claude
+### 1. Open Terminal and start Claude
 
 ```bash
 claude
 ```
 
-### Step 4: First Message
+### 2. Paste this and hit Enter
 
-Type this as your first message to Claude:
+```
+Help me install https://github.com/silships/figma-cli
+```
 
-> Setup: install dependencies and connect to Figma
-
-**Done.** Now talk to Claude about your Figma file.
+**That's it.** Claude handles everything: cloning, dependencies, Figma connection.
 
 ---
 
-## Example Prompts
+## Using It
 
-Once connected, just ask:
+Once installed, just talk to Claude:
 
 > "Create Tailwind colors"
 
 > "Add a card component"
 
+> "Check accessibility"
+
 > "Export variables as CSS"
 
-> "Analyze the colors in my design"
-
-The included `CLAUDE.md` teaches Claude all commands automatically.
-
----
-
-## Updating
-
-To get the latest version:
-
-```bash
-cd ~/Downloads/figma-cli-main
-git pull
-```
-
-Or just download the ZIP again.
+The included `CLAUDE.md` teaches Claude all commands automatically. No manual required.
 
 ## How It Works
 

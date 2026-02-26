@@ -12,12 +12,12 @@ node src/index.js tokens ds
 ```
 This creates IDS Base colors: gray, primary (blue), accent (purple), plus semantic colors.
 
-### Step 2: Create Sections Vertically Stacked
+### Step 2: Create Page Frame with Sections Inside
 
-**CRITICAL:** Create ONE frame that contains all sections, OR stack sections at same X with increasing Y.
+**CRITICAL:** Always create ONE parent frame with vertical auto-layout that contains all sections.
 
 ```bash
-# Option A: One frame with all sections inside (RECOMMENDED)
+# RECOMMENDED: One frame with all sections nested inside
 node src/index.js render '<Frame name="Landing Page" w={1440} flex="col" bg="#0a0a0f">
   <Frame name="Hero" w="fill" h={800} flex="col" justify="center" items="center" gap={24} p={80}>
     <Text size={64} weight="bold" color="#fff">Headline</Text>
@@ -35,21 +35,37 @@ node src/index.js render '<Frame name="Landing Page" w={1440} flex="col" bg="#0a
 </Frame>'
 ```
 
-```bash
-# Option B: Separate sections, then stack them
-node src/index.js render '<Frame name="Hero" w={1440} h={800} bg="#0a0a0f" ... />'
-node src/index.js render '<Frame name="Features" w={1440} h={600} bg="#111" ... />'
-node src/index.js render '<Frame name="Footer" w={1440} h={200} bg="#0a0a0f" ... />'
+**Why one parent frame?**
+- Responsive: Parent can resize, children adapt with `w="fill"`
+- Exportable: One frame = one design
+- Organized: Clear hierarchy in layers panel
 
-# Then stack vertically:
+### If Sections Already Exist Separately
+
+Wrap existing sections in a parent frame:
+```bash
 node src/index.js eval "(function() {
-  const sections = ['Hero', 'Features', 'Footer'];
-  let y = 0;
-  sections.forEach(name => {
-    const node = figma.currentPage.findOne(n => n.name === name);
-    if (node) { node.x = 0; node.y = y; y += node.height; }
+  const sectionNames = ['Hero', 'Features', 'Footer'];
+  const sections = sectionNames.map(name => figma.currentPage.findOne(n => n.name.includes(name))).filter(Boolean);
+  if (sections.length === 0) return 'No sections found';
+
+  const page = figma.createFrame();
+  page.name = 'Landing Page';
+  page.x = sections[0].x;
+  page.y = sections[0].y;
+  page.layoutMode = 'VERTICAL';
+  page.primaryAxisSizingMode = 'AUTO';
+  page.counterAxisSizingMode = 'FIXED';
+  page.resize(1440, 100);
+  page.fills = sections[0].fills;
+
+  sections.forEach(s => {
+    s.x = 0; s.y = 0;
+    page.appendChild(s);
+    s.layoutSizingHorizontal = 'FILL';
   });
-  return 'Stacked';
+
+  return 'Created page with ' + sections.length + ' sections';
 })()"
 ```
 

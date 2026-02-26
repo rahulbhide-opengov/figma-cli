@@ -82,13 +82,19 @@ claude
 Help me install https://github.com/silships/figma-cli
 ```
 
-**That's it.** Claude handles everything: cloning, dependencies, Figma connection.
+### 3. After installation, say:
+
+```
+Connect to Figma
+```
+
+**Done.** Now you can talk to Claude about your Figma file.
 
 ---
 
 ## Using It
 
-Once installed, just talk to Claude:
+Once connected, just talk to Claude:
 
 > "Create Tailwind colors"
 

@@ -4,40 +4,26 @@ CLI that controls Figma Desktop directly. No API key needed.
 
 ## IMPORTANT: When User Says "Initiate Project"
 
-Run these steps in order:
+Run these steps:
 
 ### Step 1: Install dependencies
 ```bash
 npm install
 ```
 
-### Step 2: Patch Figma (enables CDP connection)
-
-First, check if Figma is running:
-```bash
-pgrep -x Figma
-```
-
-**If Figma is running:** Tell user to close Figma completely (Cmd+Q), then run:
-```bash
-node src/index.js init
-```
-
-**If Figma is closed:** Run directly:
-```bash
-node src/index.js init
-```
-
-If permission error → user needs Full Disk Access (see below).
-
-### Step 3: Connect to Figma
-
-Tell user to open Figma Desktop and open a design file. Then:
+### Step 2: Connect to Figma
 ```bash
 node src/index.js connect
 ```
 
-### Step 4: Show examples
+This command does everything automatically:
+- Patches Figma if needed (first time only)
+- Closes Figma if running
+- Restarts Figma with debug port enabled
+
+If permission error → user needs Full Disk Access (see below).
+
+### Step 3: Show examples
 When connected, show:
 ```
 Ready! Try asking:

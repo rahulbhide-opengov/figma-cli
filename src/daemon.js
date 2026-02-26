@@ -77,10 +77,11 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // Health check
+  // Health check - actually test the connection
   if (req.url === '/health') {
+    const healthy = await isConnectionHealthy();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', connected: !!client }));
+    res.end(JSON.stringify({ status: healthy ? 'ok' : 'stale', connected: !!client, healthy }));
     return;
   }
 
@@ -101,39 +102,67 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // Execute command
+  // Execute command with retry
   if (req.url === '/exec' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', async () => {
-      try {
-        const { action, code, jsx, jsxArray } = JSON.parse(body);
-        const figma = await getClient();
-        let result;
+      const MAX_RETRIES = 2;
+      let lastError;
 
-        switch (action) {
-          case 'eval':
-            result = await figma.eval(code);
-            break;
-          case 'render':
-            result = await figma.render(jsx);
-            break;
-          case 'render-batch':
-            result = [];
-            for (const j of jsxArray) {
-              result.push(await figma.render(j));
-            }
-            break;
-          default:
-            throw new Error(`Unknown action: ${action}`);
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const { action, code, jsx, jsxArray } = JSON.parse(body);
+          const figma = await getClient();
+          let result;
+
+          // Wrap in timeout
+          const execWithTimeout = async (fn) => {
+            return Promise.race([
+              fn(),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Execution timeout')), 30000)
+              )
+            ]);
+          };
+
+          switch (action) {
+            case 'eval':
+              result = await execWithTimeout(() => figma.eval(code));
+              break;
+            case 'render':
+              result = await execWithTimeout(() => figma.render(jsx));
+              break;
+            case 'render-batch':
+              result = [];
+              for (const j of jsxArray) {
+                result.push(await execWithTimeout(() => figma.render(j)));
+              }
+              break;
+            default:
+              throw new Error(`Unknown action: ${action}`);
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ result }));
+          return; // Success, exit retry loop
+        } catch (error) {
+          lastError = error;
+          console.log(`[daemon] Attempt ${attempt + 1} failed: ${error.message}`);
+
+          // Force reconnect before retry
+          if (attempt < MAX_RETRIES) {
+            console.log('[daemon] Reconnecting before retry...');
+            try { client.close(); } catch {}
+            client = null;
+            await new Promise(r => setTimeout(r, 500)); // Brief pause
+          }
         }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ result }));
-      } catch (error) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: error.message }));
       }
+
+      // All retries failed
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: lastError.message }));
     });
     return;
   }

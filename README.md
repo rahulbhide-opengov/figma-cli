@@ -106,16 +106,80 @@ Once connected, just talk to Claude:
 
 The included `CLAUDE.md` teaches Claude all commands automatically. No manual required.
 
-## How It Works
+## Two Connection Modes
 
-Connects to Figma Desktop via Chrome DevTools Protocol (CDP). No API key needed because it uses your existing Figma session.
+### 🚀 Yolo Mode (Default) — Recommended
+
+**What it does:** Patches Figma once to enable a debug port, then connects directly.
+
+**Pros:**
+- Fully automatic (no manual steps after setup)
+- Faster execution
+- Full feature support (render, JSX, everything)
+
+**Cons:**
+- Requires one-time Figma patch (needs Full Disk Access on macOS)
+- Modifies Figma app files
 
 ```
 ┌─────────────┐      WebSocket (CDP)      ┌─────────────┐
-│ figma-ds-cli │ ◄───────────────────────► │   Figma     │
-│    (CLI)    │      localhost:9222       │  Desktop    │
-└─────────────┘                           └─────────────┘
+│     CLI     │ ◄───────────────────────► │   Figma     │
+└─────────────┘      localhost:9222       └─────────────┘
 ```
+
+```bash
+node src/index.js connect
+```
+
+---
+
+### 🔒 Safe Mode — No Patching Required
+
+**What it does:** Uses a Figma plugin to communicate. No Figma modification needed.
+
+**Pros:**
+- No patching, no app modification
+- Works in corporate/secure environments
+- No Full Disk Access needed
+
+**Cons:**
+- Manual plugin start required (each session)
+- Slightly slower
+- Some features limited (render uses eval fallback)
+
+```
+┌─────────────┐     WebSocket     ┌─────────────┐     Plugin API     ┌─────────────┐
+│     CLI     │ ◄───────────────► │   Daemon    │ ◄────────────────► │   Plugin    │
+└─────────────┘   localhost:3456  └─────────────┘                    └─────────────┘
+```
+
+**Step 1:** Start Safe Mode
+```bash
+node src/index.js connect --safe
+```
+
+**Step 2:** Import plugin (one-time only)
+1. In Figma: **Plugins → Development → Import plugin from manifest**
+2. Select `plugin/manifest.json` from this project
+3. Click **Open**
+
+**Step 3:** Start the plugin (each session)
+1. In Figma: **Plugins → Development → FigCli**
+2. Terminal shows: `Plugin connected!`
+
+**Tip:** Right-click the plugin → **Add to toolbar** for quick access.
+
+---
+
+### Which Mode Should I Use?
+
+| Situation | Recommended Mode |
+|---|---|
+| Personal Mac, no restrictions | **Yolo Mode** |
+| Corporate laptop, can't modify apps | **Safe Mode** |
+| Full Disk Access permission error | **Safe Mode** |
+| Want zero manual steps | **Yolo Mode** |
+| Security-conscious environment | **Safe Mode** |
 
 ---
 

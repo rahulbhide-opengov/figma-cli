@@ -3,27 +3,36 @@
 /**
  * Figma CLI Daemon
  *
- * Keeps a persistent connection to Figma for fast command execution.
- * Started automatically by `connect` command.
+ * Supports two modes:
+ * - Yolo Mode (CDP): Direct connection via Chrome DevTools Protocol (fast, requires patching)
+ * - Safe Mode (Plugin): Connection via Figma plugin WebSocket (secure, no patching)
  */
 
 import { createServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import { FigmaClient } from './figma-client.js';
 
 const PORT = parseInt(process.env.DAEMON_PORT) || 3456;
+const MODE = process.env.DAEMON_MODE || 'auto'; // 'auto', 'cdp', 'plugin'
 
-let client = null;
-let isConnecting = false;
+// CDP Client (Yolo Mode)
+let cdpClient = null;
+let isCdpConnecting = false;
 
-// Check if connection is healthy (WebSocket open + figma object exists)
-async function isConnectionHealthy() {
-  if (!client || !client.ws) return false;
-  if (client.ws.readyState !== 1) return false; // 1 = OPEN
+// Plugin Client (Safe Mode)
+let pluginWs = null;
+let pluginPendingRequests = new Map();
+let pluginMsgId = 0;
+
+// ============ CDP MODE (YOLO) ============
+
+async function isCdpHealthy() {
+  if (!cdpClient || !cdpClient.ws) return false;
+  if (cdpClient.ws.readyState !== 1) return false;
 
   try {
-    // Quick check if figma object exists
     const result = await Promise.race([
-      client.eval('typeof figma !== "undefined"'),
+      cdpClient.eval('typeof figma !== "undefined"'),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
     ]);
     return result === true;
@@ -32,41 +41,98 @@ async function isConnectionHealthy() {
   }
 }
 
-// Get or create FigmaClient
-async function getClient() {
-  // Check if existing connection is healthy
-  if (client) {
-    const healthy = await isConnectionHealthy();
-    if (healthy) return client;
+async function getCdpClient() {
+  if (cdpClient) {
+    const healthy = await isCdpHealthy();
+    if (healthy) return cdpClient;
 
-    // Connection is stale, close and reconnect
-    console.log('[daemon] Connection stale, reconnecting...');
-    try { client.close(); } catch {}
-    client = null;
+    console.log('[daemon] CDP connection stale, reconnecting...');
+    try { cdpClient.close(); } catch {}
+    cdpClient = null;
   }
 
-  if (isConnecting) {
-    // Wait for connection
-    while (isConnecting) {
+  if (isCdpConnecting) {
+    while (isCdpConnecting) {
       await new Promise(r => setTimeout(r, 100));
     }
-    return client;
+    return cdpClient;
   }
 
-  isConnecting = true;
+  isCdpConnecting = true;
   try {
-    client = new FigmaClient();
-    await client.connect();
-    console.log('[daemon] Connected to Figma');
+    cdpClient = new FigmaClient();
+    await cdpClient.connect();
+    console.log('[daemon] Connected to Figma via CDP (Yolo Mode)');
   } finally {
-    isConnecting = false;
+    isCdpConnecting = false;
   }
-  return client;
+  return cdpClient;
 }
 
-// Handle requests
+async function evalViaCdp(code) {
+  const client = await getCdpClient();
+  return client.eval(code);
+}
+
+// ============ PLUGIN MODE (SAFE) ============
+
+function isPluginConnected() {
+  return pluginWs && pluginWs.readyState === WebSocket.OPEN;
+}
+
+async function evalViaPlugin(code) {
+  if (!isPluginConnected()) {
+    throw new Error('Plugin not connected. Start the Figma CLI Bridge plugin in Figma.');
+  }
+
+  return new Promise((resolve, reject) => {
+    const id = ++pluginMsgId;
+    const timeout = setTimeout(() => {
+      pluginPendingRequests.delete(id);
+      reject(new Error('Plugin execution timeout'));
+    }, 30000);
+
+    pluginPendingRequests.set(id, { resolve, reject, timeout });
+
+    pluginWs.send(JSON.stringify({
+      action: 'eval',
+      id: id,
+      code: code
+    }));
+  });
+}
+
+// ============ UNIFIED EVAL ============
+
+async function executeEval(code) {
+  // Auto mode: prefer plugin if connected, fallback to CDP
+  if (MODE === 'auto') {
+    if (isPluginConnected()) {
+      return evalViaPlugin(code);
+    }
+    return evalViaCdp(code);
+  }
+
+  // Explicit mode
+  if (MODE === 'plugin') {
+    return evalViaPlugin(code);
+  }
+
+  return evalViaCdp(code);
+}
+
+function getMode() {
+  if (MODE === 'plugin') return 'safe';
+  if (MODE === 'cdp') return 'yolo';
+  // Auto: return what's actually connected
+  if (isPluginConnected()) return 'safe';
+  if (cdpClient) return 'yolo';
+  return 'disconnected';
+}
+
+// ============ HTTP SERVER ============
+
 async function handleRequest(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -77,24 +143,32 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // Health check - actually test the connection
+  // Health check
   if (req.url === '/health') {
-    const healthy = await isConnectionHealthy();
+    const mode = getMode();
+    const pluginConnected = isPluginConnected();
+    const cdpHealthy = await isCdpHealthy();
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: healthy ? 'ok' : 'stale', connected: !!client, healthy }));
+    res.end(JSON.stringify({
+      status: (pluginConnected || cdpHealthy) ? 'ok' : 'disconnected',
+      mode: mode,
+      plugin: pluginConnected,
+      cdp: cdpHealthy
+    }));
     return;
   }
 
-  // Force reconnect
+  // Force reconnect (CDP only)
   if (req.url === '/reconnect') {
     try {
-      if (client) {
-        try { client.close(); } catch {}
-        client = null;
+      if (cdpClient) {
+        try { cdpClient.close(); } catch {}
+        cdpClient = null;
       }
-      await getClient();
+      await getCdpClient();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'reconnected' }));
+      res.end(JSON.stringify({ status: 'reconnected', mode: 'yolo' }));
     } catch (error) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: error.message }));
@@ -102,7 +176,7 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // Execute command with retry
+  // Execute command
   if (req.url === '/exec' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -113,10 +187,8 @@ async function handleRequest(req, res) {
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
           const { action, code, jsx, jsxArray } = JSON.parse(body);
-          const figma = await getClient();
           let result;
 
-          // Wrap in timeout
           const execWithTimeout = async (fn) => {
             return Promise.race([
               fn(),
@@ -128,15 +200,18 @@ async function handleRequest(req, res) {
 
           switch (action) {
             case 'eval':
-              result = await execWithTimeout(() => figma.eval(code));
+              result = await execWithTimeout(() => executeEval(code));
               break;
             case 'render':
-              result = await execWithTimeout(() => figma.render(jsx));
+              // Render still uses CDP for now (figma-use dependency)
+              const client = await getCdpClient();
+              result = await execWithTimeout(() => client.render(jsx));
               break;
             case 'render-batch':
+              const c = await getCdpClient();
               result = [];
               for (const j of jsxArray) {
-                result.push(await execWithTimeout(() => figma.render(j)));
+                result.push(await execWithTimeout(() => c.render(j)));
               }
               break;
             default:
@@ -144,55 +219,109 @@ async function handleRequest(req, res) {
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ result }));
-          return; // Success, exit retry loop
+          res.end(JSON.stringify({ result, mode: getMode() }));
+          return;
         } catch (error) {
           lastError = error;
           console.log(`[daemon] Attempt ${attempt + 1} failed: ${error.message}`);
 
-          // Force reconnect before retry
-          if (attempt < MAX_RETRIES) {
+          // Force reconnect before retry (CDP only)
+          if (attempt < MAX_RETRIES && !isPluginConnected()) {
             console.log('[daemon] Reconnecting before retry...');
-            try { client.close(); } catch {}
-            client = null;
-            await new Promise(r => setTimeout(r, 500)); // Brief pause
+            try { cdpClient.close(); } catch {}
+            cdpClient = null;
+            await new Promise(r => setTimeout(r, 500));
           }
         }
       }
 
-      // All retries failed
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: lastError.message }));
     });
     return;
   }
 
-  // Not found
   res.writeHead(404);
   res.end('Not found');
 }
 
-// Start server
-const server = createServer(handleRequest);
+// ============ START SERVERS ============
 
-server.listen(PORT, '127.0.0.1', () => {
+const httpServer = createServer(handleRequest);
+
+// WebSocket server for plugin connections
+const wss = new WebSocketServer({ server: httpServer, path: '/plugin' });
+
+wss.on('connection', (ws) => {
+  console.log('[daemon] Plugin connected (Safe Mode)');
+  pluginWs = ws;
+
+  ws.on('message', (data) => {
+    try {
+      const msg = JSON.parse(data.toString());
+
+      if (msg.type === 'hello') {
+        console.log(`[daemon] Plugin version: ${msg.version}`);
+      }
+
+      if (msg.type === 'result') {
+        const pending = pluginPendingRequests.get(msg.id);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          pluginPendingRequests.delete(msg.id);
+
+          if (msg.error) {
+            pending.reject(new Error(msg.error));
+          } else {
+            pending.resolve(msg.result);
+          }
+        }
+      }
+
+      if (msg.type === 'pong') {
+        // Health check response
+      }
+    } catch (e) {
+      console.error('[daemon] Plugin message error:', e);
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('[daemon] Plugin disconnected');
+    pluginWs = null;
+
+    // Reject all pending requests
+    for (const [id, pending] of pluginPendingRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Plugin disconnected'));
+    }
+    pluginPendingRequests.clear();
+  });
+
+  ws.on('error', (error) => {
+    console.error('[daemon] Plugin WebSocket error:', error.message);
+  });
+});
+
+httpServer.listen(PORT, '127.0.0.1', () => {
   console.log(`[daemon] Figma CLI daemon running on port ${PORT}`);
+  console.log(`[daemon] Mode: ${MODE === 'auto' ? 'auto (plugin preferred, CDP fallback)' : MODE}`);
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('[daemon] Shutting down...');
-  if (client) client.close();
-  server.close(() => process.exit(0));
-});
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
-process.on('SIGINT', () => {
+function shutdown() {
   console.log('[daemon] Shutting down...');
-  if (client) client.close();
-  server.close(() => process.exit(0));
-});
+  if (cdpClient) cdpClient.close();
+  if (pluginWs) pluginWs.close();
+  httpServer.close(() => process.exit(0));
+}
 
-// Pre-connect to Figma
-getClient().catch(err => {
-  console.error('[daemon] Initial connection failed:', err.message);
-});
+// In auto/cdp mode, pre-connect to Figma
+if (MODE !== 'plugin') {
+  getCdpClient().catch(err => {
+    console.log('[daemon] CDP not available, waiting for plugin connection...');
+  });
+}

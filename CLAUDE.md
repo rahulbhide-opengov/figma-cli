@@ -86,6 +86,47 @@ node src/index.js bind fill "primary/500" -n "BUTTON_ID"
 
 ---
 
+## IMPORTANT: Two Connection Modes
+
+### 🚀 Yolo Mode (Default) — Recommended for most users
+
+**What:** Patches Figma once to enable debug port, then connects directly via CDP.
+
+**Pros:** Fully automatic, faster, all features work
+**Cons:** Needs Full Disk Access on macOS (one-time), modifies Figma app
+
+```bash
+node src/index.js connect
+```
+
+### 🔒 Safe Mode — For secure environments
+
+**What:** Uses a Figma plugin for communication. No Figma modification.
+
+**Pros:** No patching, no Full Disk Access needed, works in corporate environments
+**Cons:** Manual plugin start each session, slightly slower
+
+```bash
+node src/index.js connect --safe
+```
+
+**Then in Figma (one-time import):**
+1. **Plugins → Development → Import plugin from manifest**
+2. Select `plugin/manifest.json` from this project
+
+**Each session:**
+1. **Plugins → Development → FigCli**
+2. Terminal shows "Plugin connected!"
+
+**Tip:** Add plugin to toolbar for one-click access.
+
+### When to suggest Safe Mode
+- User gets "EPERM" or "permission" error during patching
+- User mentions corporate laptop or can't modify apps
+- User explicitly asks for no-patch solution
+
+---
+
 ## IMPORTANT: When User Says "Initiate Project"
 
 Run these steps:
@@ -95,9 +136,25 @@ Run these steps:
 npm install
 ```
 
-### Step 2: Connect to Figma
+### Step 2: Connect to Figma (try Yolo Mode first)
 ```bash
 node src/index.js connect
+```
+
+### If permission error appears:
+
+Tell user:
+```
+Permission error! Two options:
+
+Option A: Grant Full Disk Access (recommended for personal Mac)
+1. System Settings → Privacy & Security → Full Disk Access
+2. Add Terminal (or your terminal app)
+3. Restart Terminal and try again
+
+Option B: Use Safe Mode (no patching needed)
+Run: node src/index.js connect --safe
+Then start the plugin in Figma (see instructions in terminal)
 ```
 
 This command does everything automatically:

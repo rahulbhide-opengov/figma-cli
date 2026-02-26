@@ -125,7 +125,7 @@ async function fastRender(jsx) {
 }
 
 // Start daemon in background
-function startDaemon(forceRestart = false) {
+function startDaemon(forceRestart = false, mode = 'auto') {
   // If force restart, always kill existing daemon first
   if (forceRestart) {
     stopDaemon();
@@ -139,7 +139,7 @@ function startDaemon(forceRestart = false) {
   const child = spawn('node', [daemonScript], {
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env, DAEMON_PORT: String(DAEMON_PORT) }
+    env: { ...process.env, DAEMON_PORT: String(DAEMON_PORT), DAEMON_MODE: mode }
   });
   child.unref();
 
@@ -420,11 +420,22 @@ function figmaUse(args, options = {}) {
 
 // Helper: Check connection
 async function checkConnection() {
+  // First check daemon (works for both CDP and Plugin modes)
+  try {
+    const health = execSync(`curl -s http://127.0.0.1:${DAEMON_PORT}/health`, { encoding: 'utf8', timeout: 2000 });
+    const data = JSON.parse(health);
+    if (data.status === 'ok' && (data.plugin || data.cdp)) {
+      return true;
+    }
+  } catch {}
+
+  // Fallback: check CDP directly
   const connected = await FigmaClient.isConnected();
   if (!connected) {
     console.log(chalk.red('\n✗ Not connected to Figma\n'));
-    console.log(chalk.white('  Make sure Figma is running with remote debugging:'));
-    console.log(chalk.cyan('  figma-ds-cli connect\n'));
+    console.log(chalk.white('  Make sure Figma is running:'));
+    console.log(chalk.cyan('  figma-ds-cli connect') + chalk.gray(' (Yolo Mode)'));
+    console.log(chalk.cyan('  figma-ds-cli connect --safe') + chalk.gray(' (Safe Mode)\n'));
     process.exit(1);
   }
   return true;
@@ -432,14 +443,24 @@ async function checkConnection() {
 
 // Helper: Check connection (sync version for backwards compat)
 function checkConnectionSync() {
-  // This is a sync check - just verify port is open
+  // First check daemon (works for both CDP and Plugin modes)
   try {
-    execSync('curl -s http://localhost:9222/json > /dev/null', { stdio: 'pipe' });
+    const health = execSync(`curl -s http://127.0.0.1:${DAEMON_PORT}/health`, { encoding: 'utf8', timeout: 2000 });
+    const data = JSON.parse(health);
+    if (data.status === 'ok' && (data.plugin || data.cdp)) {
+      return true;
+    }
+  } catch {}
+
+  // Fallback: check CDP directly
+  try {
+    execSync('curl -s http://localhost:9222/json > /dev/null', { stdio: 'pipe', timeout: 2000 });
     return true;
   } catch {
     console.log(chalk.red('\n✗ Not connected to Figma\n'));
-    console.log(chalk.white('  Make sure Figma is running with remote debugging:'));
-    console.log(chalk.cyan('  figma-ds-cli connect\n'));
+    console.log(chalk.white('  Make sure Figma is running:'));
+    console.log(chalk.cyan('  figma-ds-cli connect') + chalk.gray(' (Yolo Mode)'));
+    console.log(chalk.cyan('  figma-ds-cli connect --safe') + chalk.gray(' (Safe Mode)\n'));
     process.exit(1);
   }
 }
@@ -803,12 +824,78 @@ program
 program
   .command('connect')
   .description('Connect to Figma Desktop')
-  .action(async () => {
+  .option('--safe', 'Use Safe Mode (plugin-based, no patching required)')
+  .action(async (options) => {
     // Fun welcome message
     console.log(chalk.hex('#FF6B35')('\n  ✨ Hey designer! ') + chalk.white("Don't be afraid of the terminal!"));
     console.log(chalk.hex('#4ECDC4')('  🎨 Happy vibe coding! ') + chalk.gray('— Sil · ') + chalk.hex('#FF6B35')('intodesignsystems.com\n'));
 
     const config = loadConfig();
+
+    // Safe Mode: Plugin-based connection (no patching, no CDP)
+    if (options.safe) {
+      console.log(chalk.hex('#4ECDC4')('  🔒 Safe Mode ') + chalk.gray('(plugin-based, no patching required)\n'));
+
+      // Stop any existing daemon
+      stopDaemon();
+
+      // Start daemon in plugin mode
+      const daemonSpinner = ora('Starting daemon in Safe Mode...').start();
+      try {
+        startDaemon(true, 'plugin');  // Force restart in plugin mode
+        await new Promise(r => setTimeout(r, 1000));
+        if (isDaemonRunning()) {
+          daemonSpinner.succeed('Daemon running in Safe Mode');
+        } else {
+          daemonSpinner.fail('Daemon failed to start');
+          return;
+        }
+      } catch (e) {
+        daemonSpinner.fail('Daemon failed: ' + e.message);
+        return;
+      }
+
+      // Show plugin setup instructions
+      console.log(chalk.hex('#FF6B35')('\n  ┌─────────────────────────────────────────────────────┐'));
+      console.log(chalk.hex('#FF6B35')('  │') + chalk.white.bold('  Setup the FigCli plugin                           ') + chalk.hex('#FF6B35')('│'));
+      console.log(chalk.hex('#FF6B35')('  └─────────────────────────────────────────────────────┘\n'));
+
+      console.log(chalk.white.bold('  ONE-TIME SETUP:\n'));
+      console.log(chalk.cyan('  1. ') + chalk.white('Open Figma Desktop and any design file'));
+      console.log(chalk.cyan('  2. ') + chalk.white('Go to ') + chalk.yellow('Plugins → Development → Import plugin from manifest'));
+      console.log(chalk.cyan('  3. ') + chalk.white('Navigate to: ') + chalk.yellow(process.cwd() + '/plugin/manifest.json'));
+      console.log(chalk.cyan('  4. ') + chalk.white('Click ') + chalk.yellow('Open') + chalk.white(' — plugin is now installed!\n'));
+
+      console.log(chalk.white.bold('  EACH SESSION:\n'));
+      console.log(chalk.cyan('  → ') + chalk.white('In Figma: ') + chalk.yellow('Plugins → Development → FigCli\n'));
+
+      console.log(chalk.gray('  💡 Tip: Right-click plugin → "Add to toolbar" for one-click access\n'));
+
+      // Wait for plugin connection
+      const pluginSpinner = ora('Waiting for plugin connection...').start();
+      let pluginConnected = false;
+      for (let i = 0; i < 30; i++) {  // Wait up to 30 seconds
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          const healthRes = execSync(`curl -s http://127.0.0.1:${DAEMON_PORT}/health`, { encoding: 'utf8' });
+          const health = JSON.parse(healthRes);
+          if (health.plugin) {
+            pluginSpinner.succeed('Plugin connected!');
+            console.log(chalk.green('\n  ✓ Ready! Safe Mode active.\n'));
+            pluginConnected = true;
+            break;
+          }
+        } catch {}
+      }
+
+      if (!pluginConnected) {
+        pluginSpinner.warn('Plugin not detected. Start the plugin in Figma to connect.');
+      }
+      return;
+    }
+
+    // Yolo Mode: CDP-based connection (default)
+    console.log(chalk.hex('#FF6B35')('  🚀 Yolo Mode ') + chalk.gray('(direct CDP connection)\n'));
 
     // Patch Figma if needed
     if (!config.patched) {
@@ -841,8 +928,11 @@ program
           console.log(chalk.cyan('  Step 3: ') + chalk.white('Click ') + chalk.yellow('+') + chalk.white(' and add ') + chalk.yellow('Terminal'));
           console.log(chalk.cyan('  Step 4: ') + chalk.white('Quit Terminal completely ') + chalk.gray('(Cmd+Q)'));
           console.log(chalk.cyan('  Step 5: ') + chalk.white('Reopen Terminal and try again\n'));
+
+          console.log(chalk.gray('  Or use Safe Mode: ') + chalk.cyan('node src/index.js connect --safe\n'));
         } else {
           console.log(chalk.yellow('\n  Try running as administrator.\n'));
+          console.log(chalk.gray('  Or use Safe Mode: ') + chalk.cyan('node src/index.js connect --safe\n'));
         }
         return;
       }
@@ -882,7 +972,7 @@ program
     // Start daemon for fast commands (force restart to get fresh connection)
     const daemonSpinner = ora('Starting speed daemon...').start();
     try {
-      startDaemon(true);  // Always restart daemon on connect
+      startDaemon(true, 'auto');  // Auto mode: uses plugin if connected, otherwise CDP
       await new Promise(r => setTimeout(r, 1500));
       if (isDaemonRunning()) {
         daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');

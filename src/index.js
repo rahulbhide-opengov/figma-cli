@@ -220,6 +220,94 @@ function getManualStartCommand() {
   }
 }
 
+/**
+ * Parse a Figma URL into fileKey and optional nodeId.
+ * Supports: figma.com/design/:key/..., figma.com/file/:key/...,
+ *           figma.com/board/:key/..., figma.com/proto/:key/...
+ */
+function parseFigmaUrl(url) {
+  if (!url) return null;
+  const m = url.match(/figma\.com\/(design|file|board|proto)\/([a-zA-Z0-9]+)/);
+  if (!m) return null;
+  const result = { type: m[1], fileKey: m[2] };
+  const nodeMatch = url.match(/node-id=([^&]+)/);
+  if (nodeMatch) result.nodeId = decodeURIComponent(nodeMatch[1]);
+  return result;
+}
+
+/**
+ * Navigate Figma to a specific file URL using CDP.
+ * First checks if the file is already open; if not, navigates to it.
+ */
+async function navigateToFigmaFile(url) {
+  const parsed = parseFigmaUrl(url);
+  if (!parsed) {
+    console.log(chalk.yellow(`  Not a valid Figma URL: ${url}`));
+    return false;
+  }
+
+  try {
+    const result = execSync('curl -s http://localhost:9222/json', {
+      encoding: 'utf8', stdio: 'pipe', timeout: 2000
+    });
+    const pages = JSON.parse(result);
+
+    // Check if this file is already open
+    const alreadyOpen = pages.find(p => p.url?.includes(parsed.fileKey));
+    if (alreadyOpen) {
+      const title = alreadyOpen.title.replace(' – Figma', '');
+      console.log(chalk.green(`  ✓ File already open: ${title}`));
+      return true;
+    }
+
+    // File not open — try to navigate to it via CDP
+    // Find any Figma tab to send the navigation command
+    const anyTab = pages.find(p => p.url?.includes('figma.com'));
+    if (anyTab && anyTab.webSocketDebuggerUrl) {
+      const spinner = ora(`Opening file: ${url.slice(0, 60)}...`).start();
+
+      // Use CDP Page.navigate to open the file
+      const ws = await import('ws');
+      const socket = new ws.default(anyTab.webSocketDebuggerUrl);
+      await new Promise((resolve, reject) => {
+        socket.on('open', () => {
+          socket.send(JSON.stringify({
+            id: 1, method: 'Page.navigate', params: { url }
+          }));
+          resolve();
+        });
+        socket.on('error', reject);
+        setTimeout(reject, 5000);
+      });
+      socket.close();
+
+      // Wait for the file to load
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Verify it opened
+      const check = execSync('curl -s http://localhost:9222/json', {
+        encoding: 'utf8', stdio: 'pipe', timeout: 2000
+      });
+      const updated = JSON.parse(check);
+      const found = updated.find(p => p.url?.includes(parsed.fileKey));
+      if (found) {
+        const title = found.title.replace(' – Figma', '');
+        spinner.succeed(`Opened: ${title}`);
+        return true;
+      }
+      spinner.warn('File navigation sent, but could not verify it opened');
+      return false;
+    }
+
+    console.log(chalk.yellow('  No Figma tab found to navigate from.'));
+    console.log(chalk.cyan(`  Please open this URL in Figma: ${url}`));
+    return false;
+  } catch (e) {
+    console.log(chalk.yellow(`  Could not navigate: ${e.message}`));
+    return false;
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
@@ -763,6 +851,110 @@ program
     figmaUse('status');
   });
 
+// ============ FILES ============
+
+program
+  .command('files')
+  .description('List all open Figma design files')
+  .action(() => {
+    try {
+      const result = execSync('curl -s http://localhost:9222/json', {
+        encoding: 'utf8', stdio: 'pipe', timeout: 3000
+      });
+      const pages = JSON.parse(result);
+      const designFiles = pages.filter(p =>
+        p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file')
+      );
+
+      if (designFiles.length === 0) {
+        console.log(chalk.yellow('\n  No design files open in Figma.\n'));
+        console.log(chalk.gray('  Open a file in Figma, or use:'));
+        console.log(chalk.cyan('  figma-ds-cli connect "https://figma.com/design/..."\n'));
+        return;
+      }
+
+      console.log(chalk.white(`\n  Open Figma files (${designFiles.length}):\n`));
+      designFiles.forEach((p, i) => {
+        const title = p.title.replace(' – Figma', '');
+        const urlMatch = p.url?.match(/figma\.com\/(design|file)\/([a-zA-Z0-9]+)/);
+        const fileKey = urlMatch ? urlMatch[2] : '?';
+        console.log(chalk.green(`  ${i + 1}. `) + chalk.white(title));
+        console.log(chalk.gray(`     URL: ${p.url}`));
+        console.log(chalk.gray(`     Key: ${fileKey}\n`));
+      });
+    } catch {
+      console.log(chalk.red('\n✗ Cannot reach Figma debug port.'));
+      console.log(chalk.gray('  Run: figma-ds-cli connect\n'));
+    }
+  });
+
+program
+  .command('new-file [name]')
+  .description('Create a new Figma design file (opens Figma drafts with a new file)')
+  .action(async (name) => {
+    checkConnectionSync();
+    const fileName = name || 'Untitled';
+    const spinner = ora(`Creating new file: ${fileName}...`).start();
+
+    try {
+      // Navigate to drafts/new file via CDP
+      const result = execSync('curl -s http://localhost:9222/json', {
+        encoding: 'utf8', stdio: 'pipe', timeout: 2000
+      });
+      const pages = JSON.parse(result);
+      const anyTab = pages.find(p => p.url?.includes('figma.com'));
+
+      if (!anyTab || !anyTab.webSocketDebuggerUrl) {
+        spinner.fail('No Figma tab found');
+        return;
+      }
+
+      const ws = await import('ws');
+      const socket = new ws.default(anyTab.webSocketDebuggerUrl);
+
+      await new Promise((resolve, reject) => {
+        socket.on('open', () => {
+          // Figma's new file URL — opens a blank design file in drafts
+          socket.send(JSON.stringify({
+            id: 1, method: 'Page.navigate',
+            params: { url: 'https://www.figma.com/design/new' }
+          }));
+          resolve();
+        });
+        socket.on('error', reject);
+        setTimeout(reject, 5000);
+      });
+      socket.close();
+
+      // Wait for new file to load
+      await new Promise(r => setTimeout(r, 4000));
+
+      // Rename the file via Figma Plugin API
+      if (name) {
+        try {
+          figmaEvalSync(`figma.root.name = '${name.replace(/'/g, "\\'")}'; figma.root.name`);
+          spinner.succeed(`New file created: ${name}`);
+        } catch {
+          spinner.succeed('New file created (could not rename — do it manually in Figma)');
+        }
+      } else {
+        spinner.succeed('New file created');
+      }
+
+      // Restart daemon to pick up new file
+      if (isDaemonRunning()) {
+        stopDaemon();
+        startDaemon(true);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      console.log(chalk.gray('  Ready to create designs in this file.\n'));
+    } catch (e) {
+      spinner.fail('Could not create new file: ' + e.message);
+      console.log(chalk.gray('  Open a new file manually in Figma, then run connect.\n'));
+    }
+  });
+
 // ============ UNPATCH ============
 
 program
@@ -803,16 +995,17 @@ program
 // ============ CONNECT ============
 
 program
-  .command('connect')
-  .description('Connect to Figma Desktop')
-  .action(async () => {
+  .command('connect [url]')
+  .description('Connect to Figma Desktop. Optionally pass a Figma file URL to target a specific file.')
+  .option('-f, --force', 'Force restart Figma even if already connected')
+  .action(async (url, options) => {
     // Fun welcome message
     console.log(chalk.hex('#FF6B35')('\n  ✨ Hey designer! ') + chalk.white("Don't be afraid of the terminal!"));
     console.log(chalk.hex('#4ECDC4')('  🎨 Happy vibe coding! ') + chalk.gray('— Sil · ') + chalk.hex('#FF6B35')('intodesignsystems.com\n'));
 
     const config = loadConfig();
 
-    // Patch Figma if needed
+    // Patch Figma if needed (one-time)
     if (!config.patched) {
       const patchSpinner = ora('Setting up Figma connection...').start();
       try {
@@ -820,8 +1013,15 @@ program
         if (patchStatus === true) {
           patchSpinner.succeed('Figma ready');
         } else if (patchStatus === false) {
+          // Need to close Figma to patch, but only this once
+          console.log(chalk.yellow('  First-time setup: Figma will restart once to enable connection.'));
+          try { killFigma(); await new Promise(r => setTimeout(r, 500)); } catch {}
           patchFigma();
           patchSpinner.succeed('Figma configured');
+          // Restart after patch
+          startFigma();
+          console.log(chalk.green('  ✓ Figma restarted after patching'));
+          await new Promise(r => setTimeout(r, 3000));
         } else {
           patchSpinner.succeed('Figma ready');
         }
@@ -830,7 +1030,6 @@ program
       } catch (err) {
         patchSpinner.fail('Setup failed');
 
-        // macOS Full Disk Access needed
         if (process.platform === 'darwin') {
           console.log(chalk.hex('#FF6B35')('\n  ┌─────────────────────────────────────────────────────┐'));
           console.log(chalk.hex('#FF6B35')('  │') + chalk.white.bold('  One-time setup required                           ') + chalk.hex('#FF6B35')('│'));
@@ -850,50 +1049,146 @@ program
       }
     }
 
-    // Stop any existing daemon
-    stopDaemon();
-
-    console.log(chalk.blue('Starting Figma...'));
+    // --- Smart connection: check if Figma is already running with debug port ---
+    let alreadyConnected = false;
+    let connectedFile = null;
     try {
-      killFigma();
-      await new Promise(r => setTimeout(r, 500));
-    } catch {}
+      const result = execSync('curl -s http://localhost:9222/json', {
+        encoding: 'utf8', stdio: 'pipe', timeout: 2000
+      });
+      const pages = JSON.parse(result);
+      const figmaPage = pages.find(p =>
+        p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file')
+      );
+      if (figmaPage) {
+        alreadyConnected = true;
+        connectedFile = figmaPage.title.replace(' – Figma', '');
+      }
+    } catch {
+      // Port not open — Figma not running with debug or not running at all
+    }
 
-    startFigma();
-    console.log(chalk.green('✓ Figma started\n'));
+    // If already connected and no --force flag, reuse the existing connection
+    if (alreadyConnected && !options.force) {
+      console.log(chalk.green('✓ Figma is already running'));
+      console.log(chalk.gray(`  Connected to: ${connectedFile}`));
 
-    // Wait and check connection
-    const spinner = ora('Waiting for connection...').start();
-    let connected = false;
-    for (let i = 0; i < 8; i++) {
-      await new Promise(r => setTimeout(r, 1000));
-      const result = figmaUse('status', { silent: true });
-      if (result && result.includes('Connected')) {
-        spinner.succeed('Connected to Figma');
-        console.log(chalk.gray(result.trim()));
-        connected = true;
-        break;
+      // If user provided a URL, check if we need to navigate to it
+      if (url) {
+        const targetConnected = await navigateToFigmaFile(url);
+        if (!targetConnected) {
+          console.log(chalk.yellow('\n  Could not navigate to the file. Please open it manually in Figma.'));
+          console.log(chalk.cyan(`  URL: ${url}\n`));
+        }
+      }
+    } else {
+      // Figma not running with debug port, or --force was used
+      if (options.force && alreadyConnected) {
+        console.log(chalk.yellow('  Force restart requested...'));
+        try { killFigma(); await new Promise(r => setTimeout(r, 1000)); } catch {}
+      }
+
+      // Check if Figma is running WITHOUT debug port
+      let figmaRunningNoDebug = false;
+      try {
+        if (IS_MAC) {
+          const ps = execSync('pgrep -x Figma', { encoding: 'utf8', stdio: 'pipe' });
+          figmaRunningNoDebug = ps.trim().length > 0;
+        } else if (IS_WINDOWS) {
+          const ps = execSync('tasklist /FI "IMAGENAME eq Figma.exe" /NH', { encoding: 'utf8', stdio: 'pipe' });
+          figmaRunningNoDebug = ps.includes('Figma.exe');
+        }
+      } catch {}
+
+      if (figmaRunningNoDebug && !options.force) {
+        // Figma is running but without the debug port — need to restart it
+        console.log(chalk.yellow('  Figma is running but without debug connection.'));
+        console.log(chalk.yellow('  Restarting Figma with debug port enabled...'));
+        try { killFigma(); await new Promise(r => setTimeout(r, 1000)); } catch {}
+        startFigma();
+        console.log(chalk.green('  ✓ Figma restarted with debug port'));
+      } else if (!figmaRunningNoDebug && !alreadyConnected) {
+        // Figma not running at all — start it
+        console.log(chalk.blue('  Starting Figma...'));
+        startFigma();
+        console.log(chalk.green('  ✓ Figma started'));
+      } else if (options.force) {
+        startFigma();
+        console.log(chalk.green('  ✓ Figma restarted'));
+      }
+
+      // Wait for connection
+      const spinner = ora('Waiting for connection...').start();
+      let connected = false;
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          const result = execSync('curl -s http://localhost:9222/json', {
+            encoding: 'utf8', stdio: 'pipe', timeout: 2000
+          });
+          const pages = JSON.parse(result);
+          const figmaPage = pages.find(p =>
+            p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file')
+          );
+          if (figmaPage) {
+            connectedFile = figmaPage.title.replace(' – Figma', '');
+            spinner.succeed('Connected to Figma');
+            console.log(chalk.gray(`  File: ${connectedFile}`));
+            connected = true;
+            break;
+          }
+          // Debug port open but no design file yet
+          if (pages.length > 0 && i >= 4) {
+            spinner.text = 'Debug port open, waiting for a design file...';
+          }
+        } catch {
+          // Not ready yet
+        }
+      }
+
+      if (!connected) {
+        spinner.warn('Figma is running but no design file is open');
+        if (url) {
+          console.log(chalk.cyan(`\n  Please open this file in Figma: ${url}\n`));
+        } else {
+          console.log(chalk.gray('  Open a design file in Figma to continue.\n'));
+        }
+        // Keep going to start daemon — it will reconnect when file is opened
+      }
+
+      // If user provided a URL, navigate to that file
+      if (url && connected) {
+        await navigateToFigmaFile(url);
       }
     }
 
-    if (!connected) {
-      spinner.warn('Open a file in Figma to connect');
-      return;
+    // Start/restart daemon for fast commands
+    const daemonRunning = isDaemonRunning();
+    if (!daemonRunning || options.force) {
+      if (daemonRunning) stopDaemon();
+      const daemonSpinner = ora('Starting speed daemon...').start();
+      try {
+        startDaemon(true);
+        await new Promise(r => setTimeout(r, 1500));
+        if (isDaemonRunning()) {
+          daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');
+        } else {
+          daemonSpinner.warn('Daemon failed to start, commands will be slower');
+        }
+      } catch (e) {
+        daemonSpinner.warn('Daemon failed: ' + e.message);
+      }
+    } else {
+      console.log(chalk.green('✓ Speed daemon already running'));
     }
 
-    // Start daemon for fast commands (force restart to get fresh connection)
-    const daemonSpinner = ora('Starting speed daemon...').start();
-    try {
-      startDaemon(true);  // Always restart daemon on connect
-      await new Promise(r => setTimeout(r, 1500));
-      if (isDaemonRunning()) {
-        daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');
-      } else {
-        daemonSpinner.warn('Daemon failed to start, commands will be slower');
-      }
-    } catch (e) {
-      daemonSpinner.warn('Daemon failed: ' + e.message);
+    // Save the connected URL if provided
+    if (url) {
+      config.lastFileUrl = url;
+      saveConfig(config);
     }
+
+    console.log(chalk.green('\n  Ready! Just start asking what you want to create.\n'));
   });
 
 // ============ VARIABLES ============

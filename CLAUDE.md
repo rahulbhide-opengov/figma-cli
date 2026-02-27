@@ -9,9 +9,65 @@ CLI that controls Figma Desktop directly. No API key needed.
 
 ### How This Works
 1. User says something like "Create a login form" or "Add a button"
-2. You determine the right command from the mappings below
-3. You run the command(s) silently
-4. You report back what was created in plain English
+2. **FIRST: Make sure a Figma file is selected** (see File Selection below)
+3. You determine the right command from the mappings below
+4. You run the command(s) silently
+5. You report back what was created in plain English
+
+---
+
+## CRITICAL: File Selection (Before Creating ANY Design)
+
+**Before creating any design**, you MUST have a target Figma file. **Ask the user directly:**
+
+### If user provided a Figma URL in their message
+→ Run `node src/index.js connect "THE_URL"` and proceed. No need to ask.
+
+### If NO Figma URL was provided
+→ Ask the user immediately:
+
+> "Before I start, where should I create the designs?
+> - **Paste a Figma file URL** if you have an existing file
+> - **Say 'new file'** and I'll create a fresh one for you"
+
+Then based on the answer:
+- **User pastes a URL** → Run `node src/index.js connect "URL"` then proceed
+- **User says "new file"** or "create new" → Run `node src/index.js new-file "Design Name"` then proceed
+- **User gives a name** like "call it Dashboard Designs" → Run `node src/index.js new-file "Dashboard Designs"` then proceed
+
+## CRITICAL: Session File Lock
+
+**Once a file is selected, ALL commands for the rest of this conversation go to that same file.** Do NOT ask again. Do NOT switch files unless the user explicitly says:
+- "Switch to a different file"
+- "Use this file instead: [URL]"
+- "Create a new file for this"
+
+This means: if the user asks to create a button, then a card, then a full page — all of them go into the same file that was chosen at the start. Never re-ask, never re-connect, never lose track of the file.
+
+### Example Conversations
+
+**Example 1 — URL provided:**
+> User: "Here's my file https://figma.com/design/abc123/App — create a settings page"
+> Agent: *runs `node src/index.js connect "https://figma.com/design/abc123/App"`*
+> Agent: *creates settings page — no questions asked*
+> User: "Now add a button too"
+> Agent: *creates button in the SAME file — does not ask again*
+
+**Example 2 — No URL:**
+> User: "Build me a login screen"
+> Agent: "Before I start, where should I create the designs? Paste a Figma file URL, or say 'new file' and I'll create one."
+> User: "New file, call it Login Screens"
+> Agent: *runs `node src/index.js new-file "Login Screens"`*
+> Agent: *creates login screen*
+> User: "Also add a forgot-password flow"
+> Agent: *creates it in "Login Screens" — same file, no re-asking*
+
+**Example 3 — Switching files mid-session:**
+> User: "Actually, put the next design in a different file"
+> Agent: "Sure — paste a URL or say 'new file'."
+> User: "https://figma.com/design/xyz789/Other-Project"
+> Agent: *runs `node src/index.js connect "https://figma.com/design/xyz789/Other-Project"`*
+> Agent: *all subsequent commands now go to this new file*
 
 ---
 
@@ -82,6 +138,23 @@ Below is the complete mapping. User says the LEFT side. You silently run the RIG
 | "Create a settings page" / "Preferences page" | `node src/index.js ds page settings` |
 | "Create a mobile dashboard" / "Dashboard for mobile" | `node src/index.js ds page dashboard --mobile` |
 | "Create a mobile form" | `node src/index.js ds page form --mobile` |
+
+### Connection & Figma Files
+
+| User says | You run |
+|-----------|---------|
+| "Initiate project" / "Set up" / "Connect" | `node src/index.js connect` |
+| "Connect to this file: https://figma.com/design/abc..." | `node src/index.js connect "https://figma.com/design/abc..."` |
+| "Here's my Figma file: [URL]" / "Use this file: [URL]" | `node src/index.js connect "[URL]"` |
+| User pastes any figma.com URL | `node src/index.js connect "[URL]"` |
+| "New file" / "Create a new Figma file" / "Start fresh" | `node src/index.js new-file "File Name"` |
+| "New file called [Name]" | `node src/index.js new-file "[Name]"` |
+| "Switch to a different file" / "Use this file instead" | Ask for URL or new file name, then `connect` or `new-file` |
+| "Figma isn't responding" / "Reconnect" / "Restart Figma" | `node src/index.js connect --force` |
+
+**IMPORTANT:** When a user shares a Figma URL at any point, run `connect` with that URL. Do NOT restart Figma — `connect` reuses the existing connection.
+
+**IMPORTANT:** Once a file is selected, **stick with it for the entire session**. Never re-ask, never switch unless the user explicitly requests it.
 
 ### Design System Tokens
 
@@ -525,22 +598,52 @@ npm install
 node src/index.js connect
 ```
 
-This command does everything automatically:
-- Patches Figma if needed (first time only)
-- Closes Figma if running
-- Restarts Figma with debug port enabled
+This command is SMART about connections:
+- If Figma is already running with debug port → **reuses existing connection** (no restart)
+- If Figma is running WITHOUT debug port → restarts it once with debug enabled
+- If Figma is not running → starts it with debug enabled
+- Patches Figma only on first-time setup (one-time)
+- **NEVER kills Figma unnecessarily**
+
+### If user provides a Figma file URL:
+```bash
+node src/index.js connect "https://www.figma.com/design/abc123/My-File"
+```
+This will:
+- Connect to Figma (without restarting if already running)
+- Navigate to that specific file
+- If the file is already open, just confirms it
+
+### If user says "connect to this file" or shares a Figma URL:
+Just run `connect` with the URL. The user doesn't need to know the command.
+
+| User says | You run |
+|-----------|---------|
+| "Initiate project" | `node src/index.js connect` |
+| "Connect to Figma" | `node src/index.js connect` |
+| "Connect to https://figma.com/design/abc..." | `node src/index.js connect "https://figma.com/design/abc..."` |
+| "Use this file: [URL]" | `node src/index.js connect "[URL]"` |
+| "Here's my Figma file: [URL]" | `node src/index.js connect "[URL]"` |
+| "Figma isn't working" / "Reconnect" | `node src/index.js connect --force` |
+
+### Force restart (only when user reports issues):
+```bash
+node src/index.js connect --force
+```
+Use `--force` ONLY when the user says connection is broken or Figma is not responding. Never use it by default.
 
 If permission error → user needs Full Disk Access (see below).
 
 ### Step 3: Show examples
 When connected, show:
 ```
-Ready! Try asking:
+Ready! CDS Design System loaded (322 tokens, 26 components).
 
-"Create a blue rectangle"
-"Add Tailwind colors to my file"
-"Create a card with title and description"
-"Check accessibility"
+Try:
+  "Create a button"
+  "Design a login form"
+  "Build me a dashboard"
+  "What's our primary color?"
 ```
 
 ---

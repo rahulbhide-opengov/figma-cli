@@ -8,65 +8,73 @@ CLI that controls Figma Desktop directly. No API key needed.
 **NEVER show `node src/index.js` commands to the user.** The user speaks plain English. You figure out and run the right command silently. The user should never need to know a CLI exists.
 
 ### How This Works
-1. User says something like "Create a login form" or "Add a button"
-2. **FIRST: Make sure a Figma file is selected** (see File Selection below)
+1. **FIRST: Get a Figma file URL** — ask the user for it if not provided (see below)
+2. Connect to the file using the URL
 3. You determine the right command from the mappings below
 4. You run the command(s) silently
 5. You report back what was created in plain English
 
 ---
 
-## CRITICAL: File Selection (Before Creating ANY Design)
+## CRITICAL: Figma File URL Required First (Before Creating ANY Design)
 
-**Before creating any design**, you MUST have a target Figma file. **Ask the user directly:**
+**The very first thing you do in EVERY conversation is get a Figma file URL from the user.** No design work happens until a URL is provided and connected.
 
 ### If user provided a Figma URL in their message
-→ Run `node src/index.js connect "THE_URL"` and proceed. No need to ask.
+→ Run `node src/index.js connect "THE_URL"` and proceed immediately.
 
-### If NO Figma URL was provided
-→ Ask the user immediately:
+### If NO Figma URL was provided (this is the common case)
+→ **STOP. Ask for the URL before doing anything else:**
 
-> "Before I start, where should I create the designs?
-> - **Paste a Figma file URL** if you have an existing file
-> - **Say 'new file'** and I'll create a fresh one for you"
+> "To get started, please share the Figma file URL where you'd like me to create the designs.
+>
+> Just paste the link (e.g. https://www.figma.com/design/abc123/My-File)"
 
-Then based on the answer:
-- **User pastes a URL** → Run `node src/index.js connect "URL"` then proceed
-- **User says "new file"** or "create new" → Run `node src/index.js new-file "Design Name"` then proceed
-- **User gives a name** like "call it Dashboard Designs" → Run `node src/index.js new-file "Dashboard Designs"` then proceed
+**Wait for the user to respond with a URL.** Then run `node src/index.js connect "URL"` and proceed.
+
+### If user says they don't have a file
+Only if the user explicitly says "I don't have a file", "create a new one", or "new file":
+→ Run `node src/index.js new-file "Design Name"` and proceed.
+
+**Do NOT offer "new file" as a first option.** Always ask for a URL first. Creating a new file is the fallback, not the default.
 
 ## CRITICAL: Session File Lock
 
-**Once a file is selected, ALL commands for the rest of this conversation go to that same file.** Do NOT ask again. Do NOT switch files unless the user explicitly says:
+**Once a file is connected via URL, ALL commands for the rest of this conversation go to that same file.** Do NOT ask again. Do NOT switch files unless the user explicitly says:
 - "Switch to a different file"
 - "Use this file instead: [URL]"
 - "Create a new file for this"
 
-This means: if the user asks to create a button, then a card, then a full page — all of them go into the same file that was chosen at the start. Never re-ask, never re-connect, never lose track of the file.
+If the user asks to create a button, then a card, then a full page — all go into the same file. Never re-ask, never re-connect, never lose track.
 
 ### Example Conversations
 
-**Example 1 — URL provided:**
+**Example 1 — URL provided upfront:**
 > User: "Here's my file https://figma.com/design/abc123/App — create a settings page"
 > Agent: *runs `node src/index.js connect "https://figma.com/design/abc123/App"`*
 > Agent: *creates settings page — no questions asked*
 > User: "Now add a button too"
 > Agent: *creates button in the SAME file — does not ask again*
 
-**Example 2 — No URL:**
+**Example 2 — No URL (most common):**
 > User: "Build me a login screen"
-> Agent: "Before I start, where should I create the designs? Paste a Figma file URL, or say 'new file' and I'll create one."
-> User: "New file, call it Login Screens"
-> Agent: *runs `node src/index.js new-file "Login Screens"`*
+> Agent: "To get started, please share the Figma file URL where you'd like me to create the designs."
+> User: "https://figma.com/design/def456/My-App"
+> Agent: *runs `node src/index.js connect "https://figma.com/design/def456/My-App"`*
 > Agent: *creates login screen*
 > User: "Also add a forgot-password flow"
-> Agent: *creates it in "Login Screens" — same file, no re-asking*
+> Agent: *creates it in the SAME file — no re-asking*
 
-**Example 3 — Switching files mid-session:**
-> User: "Actually, put the next design in a different file"
-> Agent: "Sure — paste a URL or say 'new file'."
-> User: "https://figma.com/design/xyz789/Other-Project"
-> Agent: *runs `node src/index.js connect "https://figma.com/design/xyz789/Other-Project"`*
+**Example 3 — User has no file:**
+> User: "Create a dashboard"
+> Agent: "To get started, please share the Figma file URL where you'd like me to create the designs."
+> User: "I don't have one, create a new file"
+> Agent: *runs `node src/index.js new-file "Dashboard"`*
+> Agent: *creates dashboard*
+
+**Example 4 — Switching files mid-session:**
+> User: "Use this file instead: https://figma.com/design/xyz789/Other"
+> Agent: *runs `node src/index.js connect "https://figma.com/design/xyz789/Other"`*
 > Agent: *all subsequent commands now go to this new file*
 
 ---
@@ -592,9 +600,15 @@ Run these steps:
 npm install
 ```
 
-### Step 2: Connect to Figma
+### Step 2: Ask for Figma file URL
+**Before connecting, ask the user for their Figma file URL:**
+
+> "Setup complete! Please share the Figma file URL where you'd like to create designs."
+
+### Step 3: Connect to the file
+Once user shares a URL:
 ```bash
-node src/index.js connect
+node src/index.js connect "https://www.figma.com/design/abc123/My-File"
 ```
 
 This command **NEVER closes, kills, or restarts Figma**. It only:
@@ -602,24 +616,16 @@ This command **NEVER closes, kills, or restarts Figma**. It only:
 - If Figma isn't running at all → starts it (fresh start, no kill)
 - If Figma is running without debug port → asks user to quit and reopen manually
 - If Figma is running with debug port → uses it as-is
-
-### If user provides a Figma file URL:
-```bash
-node src/index.js connect "https://www.figma.com/design/abc123/My-File"
-```
-This navigates to that file without touching Figma itself.
-
-### If no URL is provided:
-The agent should ask: "Share a Figma file URL so I can connect to the right file."
+- Navigates to the specific file from the URL
 
 If permission error → user needs Full Disk Access (see below).
 
-### Step 3: Show examples
+### Step 4: Confirm and show examples
 When connected, show:
 ```
-Ready! CDS Design System loaded (322 tokens, 26 components).
+Connected to [File Name]! CDS Design System loaded (322 tokens, 26 components).
 
-Share a Figma file link and try:
+Try:
   "Create a button"
   "Design a login form"
   "Build me a dashboard"

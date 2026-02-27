@@ -13,6 +13,8 @@ import { createServer } from 'http';
 import { FigJamClient } from './figjam-client.js';
 import { FigmaClient } from './figma-client.js';
 import { isPatched, patchFigma, unpatchFigma, getFigmaCommand } from './figma-patch.js';
+import dsEngine from './ds-engine.js';
+import componentRegistry from './component-registry.js';
 
 // Daemon configuration
 const DAEMON_PORT = 3456;
@@ -4073,6 +4075,440 @@ figjam
       console.log(chalk.red('Error: ' + error.message));
     } finally {
       client.close();
+    }
+  });
+
+// ============================================================================
+// DESIGN SYSTEM COMMANDS (ds)
+// ============================================================================
+
+const ds = program
+  .command('ds')
+  .description('Design system commands - create components, push tokens, build pages using your DS');
+
+// ds list - list available components
+ds
+  .command('list')
+  .description('List all design system components available for creation')
+  .action(() => {
+    const comps = componentRegistry.listComponents();
+    console.log(chalk.bold.cyan('\n  Design System Components\n'));
+    console.log(chalk.gray(`  ${comps.length} components loaded from your design system\n`));
+    for (const comp of comps) {
+      const variants = comp.variants.length ? chalk.gray(` [${comp.variants.join(', ')}]`) : '';
+      const sizes = comp.sizes.length ? chalk.gray(` (${comp.sizes.join(', ')})`) : '';
+      console.log(`  ${chalk.bold(comp.name)}${variants}${sizes}`);
+      console.log(`    ${chalk.gray(comp.description)}`);
+    }
+    console.log('');
+  });
+
+// ds info - show token stats
+ds
+  .command('info')
+  .description('Show design system token statistics')
+  .action(() => {
+    try {
+      const stats = dsEngine.getTokenStats();
+      console.log(chalk.bold.cyan('\n  Design System Token Stats\n'));
+      console.log(`  ${chalk.bold('Total tokens:')} ${stats.total}`);
+      console.log('');
+      for (const [cat, count] of Object.entries(stats.byCategory)) {
+        console.log(`  ${chalk.gray('•')} ${cat}: ${chalk.bold(count)}`);
+      }
+      if (stats.legacyAliases) {
+        console.log(`  ${chalk.gray('•')} legacy aliases: ${chalk.yellow(stats.legacyAliases)}`);
+      }
+      console.log('');
+    } catch (e) {
+      console.log(chalk.red('Error loading tokens: ' + e.message));
+    }
+  });
+
+// ds search <query> - search tokens
+ds
+  .command('search <query>')
+  .description('Search design tokens by name (e.g. "primary", "button", "spacing/4")')
+  .option('-l, --limit <n>', 'Max results', '20')
+  .action((query, options) => {
+    try {
+      const results = dsEngine.searchTokens(query);
+      const keys = Object.keys(results).slice(0, parseInt(options.limit));
+      if (keys.length === 0) {
+        console.log(chalk.yellow(`\n  No tokens matching "${query}"\n`));
+        return;
+      }
+      console.log(chalk.bold.cyan(`\n  Tokens matching "${query}" (${keys.length}/${Object.keys(results).length})\n`));
+      for (const key of keys) {
+        console.log(`  ${chalk.gray(key)}: ${chalk.bold(results[key])}`);
+      }
+      console.log('');
+    } catch (e) {
+      console.log(chalk.red('Error: ' + e.message));
+    }
+  });
+
+// ds create <component> - create a component in Figma
+ds
+  .command('create <component>')
+  .description('Create a design system component in Figma (e.g. "button", "card", "dialog")')
+  .option('-v, --variant <variant>', 'Component variant (e.g. "contained", "outlined")')
+  .option('-s, --size <size>', 'Component size (e.g. "small", "medium", "large")')
+  .option('--label <text>', 'Label/text for the component')
+  .option('--title <text>', 'Title text')
+  .option('--body <text>', 'Body/description text')
+  .option('--color <color>', 'Color variant (e.g. "primary", "error")')
+  .option('--width <n>', 'Width override')
+  .option('--disabled', 'Disabled state')
+  .option('--open', 'Open/expanded state')
+  .option('--json', 'Output raw JSX instead of rendering')
+  .action(async (componentName, options) => {
+    const comp = componentRegistry.getComponent(componentName);
+    if (!comp) {
+      console.log(chalk.red(`\n  Unknown component: "${componentName}"\n`));
+      console.log(chalk.gray('  Available components:'));
+      componentRegistry.listComponents().forEach(c => {
+        console.log(`    ${chalk.cyan(c.key)} - ${c.name}`);
+      });
+      console.log('');
+      return;
+    }
+
+    const renderOpts = {};
+    if (options.variant) renderOpts.variant = options.variant;
+    if (options.size) renderOpts.size = options.size;
+    if (options.label) renderOpts.label = options.label;
+    if (options.title) renderOpts.title = options.title;
+    if (options.body) renderOpts.body = options.body;
+    if (options.color) renderOpts.color = options.color;
+    if (options.width) renderOpts.width = parseInt(options.width);
+    if (options.disabled) renderOpts.disabled = true;
+    if (options.open) renderOpts.open = true;
+
+    try {
+      const jsx = comp.render(renderOpts);
+
+      if (options.json) {
+        console.log(jsx);
+        return;
+      }
+
+      await checkConnection();
+      const spinner = ora(`Creating ${comp.name}...`).start();
+
+      let posX = getNextFreeX();
+      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
+      const output = execSync(cmd, {
+        input: jsx,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 30000
+      });
+
+      const result = JSON.parse(output.trim());
+      spinner.succeed(`${comp.name} created: ${result.id}`);
+      if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
+    } catch (e) {
+      console.log(chalk.red(`\n  Failed to create ${comp.name}: ${e.stderr || e.message}\n`));
+    }
+  });
+
+// ds showcase <component> - create all variants of a component
+ds
+  .command('showcase <component>')
+  .description('Create all variants of a component side by side (for documentation)')
+  .option('-g, --gap <n>', 'Gap between variants', '40')
+  .option('-d, --direction <dir>', 'Layout: row or col', 'row')
+  .action(async (componentName, options) => {
+    const comp = componentRegistry.getComponent(componentName);
+    if (!comp) {
+      console.log(chalk.red(`\n  Unknown component: "${componentName}"\n`));
+      return;
+    }
+
+    await checkConnection();
+    const spinner = ora(`Creating ${comp.name} showcase...`).start();
+
+    try {
+      const jsxItems = componentRegistry.renderAllVariants(componentName);
+      const gap = parseInt(options.gap) || 40;
+      const vertical = options.direction === 'col';
+      let currentX = vertical ? 0 : getNextFreeX(gap);
+      let currentY = vertical ? getNextFreeY(gap) : 0;
+      let count = 0;
+
+      for (const jsx of jsxItems) {
+        try {
+          const cmd = `npx figma-use render --stdin --json --x ${currentX} --y ${currentY}`;
+          const output = execSync(cmd, {
+            input: jsx,
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            timeout: 30000
+          });
+          const result = JSON.parse(output.trim());
+          count++;
+
+          try {
+            if (vertical) {
+              const height = figmaEvalSync(`(function() { const n = figma.getNodeById('${result.id}'); return n ? n.height : 200; })()`);
+              currentY += (height || 200) + gap;
+            } else {
+              const width = figmaEvalSync(`(function() { const n = figma.getNodeById('${result.id}'); return n ? n.width : 300; })()`);
+              currentX += (width || 300) + gap;
+            }
+          } catch {
+            if (vertical) currentY += 200 + gap;
+            else currentX += 300 + gap;
+          }
+        } catch (err) {
+          // Continue with next variant
+        }
+      }
+
+      spinner.succeed(`${comp.name} showcase: ${count} variants created`);
+    } catch (e) {
+      spinner.fail(`Showcase failed: ${e.message}`);
+    }
+  });
+
+// ds tokens push - push all tokens into Figma as variables
+const dsTokens = ds
+  .command('tokens')
+  .description('Manage design system tokens in Figma');
+
+dsTokens
+  .command('push')
+  .description('Push all design tokens into Figma as variables (creates collections)')
+  .option('--category <name>', 'Only push a specific category (colors, typography, spacing, etc.)')
+  .option('--dry-run', 'Show what would be created without creating')
+  .action(async (options) => {
+    await checkConnection();
+
+    const categoryMap = {
+      colors: { collection: 'DS - Colors', category: 'colors' },
+      typography: { collection: 'DS - Typography', category: 'typography' },
+      spacing: { collection: 'DS - Spacing', category: 'spacing' },
+      sizing: { collection: 'DS - Sizing', category: 'sizing' },
+      borderRadius: { collection: 'DS - Border Radius', category: 'borderRadius' },
+      elevation: { collection: 'DS - Elevation', category: 'elevation' },
+      zIndex: { collection: 'DS - Z-Index', category: 'zIndex' },
+      components: { collection: 'DS - Components', category: 'components' },
+      transitions: { collection: 'DS - Transitions', category: 'transitions' },
+      breakpoints: { collection: 'DS - Breakpoints', category: 'breakpoints' },
+    };
+
+    const targets = options.category
+      ? { [options.category]: categoryMap[options.category] }
+      : categoryMap;
+
+    if (!targets || Object.keys(targets).length === 0) {
+      console.log(chalk.red(`\n  Unknown category: "${options.category}"`));
+      console.log(chalk.gray('  Available: ' + Object.keys(categoryMap).join(', ')));
+      return;
+    }
+
+    if (options.dryRun) {
+      console.log(chalk.bold.cyan('\n  Dry Run - Token Push Plan\n'));
+      for (const [name, config] of Object.entries(targets)) {
+        const tokens = dsEngine.getCategory(config.category);
+        const count = Object.keys(tokens).length;
+        console.log(`  ${chalk.bold(config.collection)}: ${count} tokens`);
+      }
+      console.log('');
+      return;
+    }
+
+    const spinner = ora('Pushing design tokens to Figma...').start();
+    let totalCreated = 0;
+
+    for (const [name, config] of Object.entries(targets)) {
+      spinner.text = `Pushing ${config.collection}...`;
+      const code = dsEngine.generateFigmaVariableCode(config.category, config.collection);
+      if (!code) continue;
+
+      try {
+        const result = figmaEvalSync(code);
+        if (result) {
+          console.log(chalk.green(`  ✓ ${result}`));
+          const match = String(result).match(/Created (\d+)/);
+          if (match) totalCreated += parseInt(match[1]);
+        }
+      } catch (e) {
+        console.log(chalk.yellow(`  ⚠ ${config.collection}: ${e.message}`));
+      }
+    }
+
+    spinner.succeed(`Pushed ${totalCreated} tokens to Figma`);
+  });
+
+// ds tokens push-dark - add dark mode to color collection
+dsTokens
+  .command('push-dark')
+  .description('Add dark theme mode to the color variable collection')
+  .action(async () => {
+    await checkConnection();
+    const spinner = ora('Adding dark theme mode...').start();
+
+    try {
+      const code = dsEngine.generateDarkModeCode('DS - Colors');
+      if (!code) {
+        spinner.fail('No dark theme tokens found');
+        return;
+      }
+      const result = figmaEvalSync(code);
+      spinner.succeed(String(result));
+    } catch (e) {
+      spinner.fail('Failed: ' + e.message);
+    }
+  });
+
+// ds tokens list - list tokens by category
+dsTokens
+  .command('list')
+  .description('List design tokens (optionally filtered by category)')
+  .option('-c, --category <name>', 'Filter by category')
+  .option('-l, --limit <n>', 'Max results per category', '50')
+  .action((options) => {
+    try {
+      if (options.category) {
+        const tokens = dsEngine.getCategory(options.category);
+        const keys = Object.keys(tokens);
+        if (keys.length === 0) {
+          console.log(chalk.yellow(`\n  No tokens in category "${options.category}"`));
+          return;
+        }
+        console.log(chalk.bold.cyan(`\n  ${options.category} (${keys.length} tokens)\n`));
+        keys.slice(0, parseInt(options.limit)).forEach(k => {
+          console.log(`  ${chalk.gray(k)}: ${chalk.bold(tokens[k])}`);
+        });
+      } else {
+        const stats = dsEngine.getTokenStats();
+        console.log(chalk.bold.cyan('\n  All Token Categories\n'));
+        for (const [cat, count] of Object.entries(stats.byCategory)) {
+          console.log(`  ${chalk.bold(cat)}: ${count} tokens`);
+        }
+        console.log(chalk.gray('\n  Use --category <name> to see tokens in a category\n'));
+      }
+    } catch (e) {
+      console.log(chalk.red('Error: ' + e.message));
+    }
+  });
+
+// ds page - build a complete page from sections
+ds
+  .command('page <type>')
+  .description('Generate a full page layout (e.g. "dashboard", "form", "landing", "settings")')
+  .option('-w, --width <n>', 'Page width', '1440')
+  .option('--name <name>', 'Frame name')
+  .option('--mobile', 'Generate mobile version (375px)')
+  .action(async (pageType, options) => {
+    await checkConnection();
+
+    const width = options.mobile ? 375 : parseInt(options.width);
+    const pageName = options.name || `${pageType} Page`;
+    const variant = options.mobile ? 'mobile' : 'desktop';
+
+    const pageConfigs = {
+      dashboard: {
+        name: pageName,
+        width,
+        sections: [
+          { component: 'pageheading', options: { title: 'Dashboard', breadcrumbs: ['Home'], description: 'Overview of your workspace', hasActions: true, variant } },
+          { component: 'sectionheading', options: { title: 'Quick Stats', hasAction: true, actionLabel: 'View All' } },
+          { component: 'card', options: { title: 'Total Users', body: '12,482 active users', variant: 'elevated', width: Math.min(320, width - 80) } },
+          { component: 'sectionheading', options: { title: 'Recent Activity' } },
+          { component: 'datatable', options: { width: Math.min(800, width - 80), columns: ['User', 'Action', 'Date', 'Status'], rows: [['John Doe', 'Created report', '2026-02-25', 'Done'], ['Jane Smith', 'Updated profile', '2026-02-24', 'Done'], ['Bob Wilson', 'Uploaded file', '2026-02-23', 'Pending']] } },
+        ]
+      },
+      form: {
+        name: pageName,
+        width,
+        sections: [
+          { component: 'pageheading', options: { title: 'Create Account', breadcrumbs: ['Home', 'Settings'], variant } },
+          { component: 'formlayout', options: { title: 'Personal Information', fields: [
+            { label: 'First Name', placeholder: 'Enter first name' },
+            { label: 'Last Name', placeholder: 'Enter last name' },
+            { label: 'Email Address', placeholder: 'email@company.com' },
+            { label: 'Password', placeholder: 'Min 8 characters' },
+          ] } },
+        ]
+      },
+      landing: {
+        name: pageName,
+        width,
+        sections: [
+          { component: 'navigation', options: { items: ['Home', 'Features', 'Pricing', 'About', 'Contact'], activeIndex: 0 }, wrapper: { p: 0 } },
+          { component: 'pageheading', options: { title: 'Build Better Products', description: 'A comprehensive design system for building consistent, accessible user interfaces at scale.', chips: ['New', 'v2.0'], hasActions: true, variant } },
+          { component: 'sectionheading', options: { title: 'Features', description: 'Everything you need to design and build' } },
+          { component: 'card', options: { title: 'Design Tokens', body: '950+ tokens for colors, typography, spacing, and more.', variant: 'elevated', width: Math.min(320, width - 80) } },
+        ]
+      },
+      settings: {
+        name: pageName,
+        width,
+        sections: [
+          { component: 'pageheading', options: { title: 'Settings', breadcrumbs: ['Home', 'Account'], variant } },
+          { component: 'accordion', options: { width: Math.min(600, width - 80), items: [
+            { title: 'Profile Settings', content: 'Update your name, email, and profile picture.', expanded: true },
+            { title: 'Notification Preferences', content: 'Choose how you receive alerts and updates.', expanded: false },
+            { title: 'Security', content: 'Manage password, two-factor authentication, and sessions.', expanded: false },
+            { title: 'Billing', content: 'View invoices and manage payment methods.', expanded: false },
+          ] } },
+          { component: 'switch', options: { label: 'Enable dark mode', checked: false } },
+          { component: 'switch', options: { label: 'Email notifications', checked: true } },
+        ]
+      }
+    };
+
+    const config = pageConfigs[pageType];
+    if (!config) {
+      console.log(chalk.red(`\n  Unknown page type: "${pageType}"`));
+      console.log(chalk.gray('  Available: ' + Object.keys(pageConfigs).join(', ')));
+      console.log(chalk.gray('  Or use "ds create <component>" for individual components\n'));
+      return;
+    }
+
+    const spinner = ora(`Building ${pageType} page...`).start();
+
+    try {
+      const jsx = componentRegistry.buildPage(config);
+      const posX = getNextFreeX();
+      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
+      const output = execSync(cmd, {
+        input: jsx,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 60000
+      });
+      const result = JSON.parse(output.trim());
+      spinner.succeed(`${pageType} page created: ${result.id}`);
+      if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
+    } catch (e) {
+      spinner.fail(`Page creation failed: ${e.stderr || e.message}`);
+    }
+  });
+
+// ds resolve <token> - resolve a token value
+ds
+  .command('resolve <token>')
+  .description('Resolve a token name to its value (e.g. "colors/primary/main")')
+  .option('-d, --dark', 'Use dark theme')
+  .action((token, options) => {
+    // Add -- prefix if not present (user can omit it to avoid shell issues)
+    if (!token.startsWith('--')) token = '--' + token;
+    const theme = options.dark ? 'dark' : 'light';
+    const value = dsEngine.resolveToken(token, theme);
+    if (value) {
+      console.log(`${chalk.gray(token)}: ${chalk.bold(value)}`);
+    } else {
+      console.log(chalk.yellow(`Token not found: ${token}`));
+      const similar = dsEngine.searchTokens(token.replace(/^--/, '').split('/').pop());
+      const keys = Object.keys(similar).slice(0, 5);
+      if (keys.length > 0) {
+        console.log(chalk.gray('\n  Did you mean:'));
+        keys.forEach(k => console.log(`    ${k}: ${similar[k]}`));
+      }
     }
   });
 

@@ -2,6 +2,138 @@
 
 CLI that controls Figma Desktop directly. No API key needed.
 
+## IMPORTANT: Design System Commands (ds)
+
+This CLI has a built-in design system engine that reads tokens from `design-system-tokens.ts` (950+ tokens across 10 categories) and can generate Figma components that match the design system exactly.
+
+### "Show me what design system components are available"
+```bash
+node src/index.js ds list
+```
+Shows all 26 components with their variants and sizes.
+
+### "Show design system token stats"
+```bash
+node src/index.js ds info
+```
+
+### "Create a button" / "Create a card" / "Create a dialog"
+```bash
+# Create any DS component in Figma
+node src/index.js ds create button
+node src/index.js ds create card --title "My Card" --body "Description here"
+node src/index.js ds create dialog --title "Confirm Delete"
+node src/index.js ds create textfield --variant outlined --label "Email"
+node src/index.js ds create navigation
+node src/index.js ds create timeline
+node src/index.js ds create datatable
+node src/index.js ds create chip --label "Active" --color primary
+node src/index.js ds create avatar --size large --initials "JD"
+node src/index.js ds create stepper --steps '["Details","Address","Payment"]'
+```
+
+Available components: button, textfield, card, dialog, chip, tooltip, snackbar, navigation, breadcrumb, timeline, stepper, datatable, pageheading, sectionheading, formlayout, avatar, accordion, radio, switch, togglebutton, select, skeleton, list, buttongroup, iconbutton, datepicker
+
+### Component options
+```bash
+# Variant: contained, outlined, text, filled, elevated, etc.
+node src/index.js ds create button -v outlined -s large --label "Submit"
+
+# Colors: primary, secondary, error
+node src/index.js ds create button --color error --label "Delete"
+
+# Disabled state
+node src/index.js ds create button --disabled --label "Unavailable"
+
+# Preview JSX without rendering
+node src/index.js ds create card --json
+```
+
+### "Show all button variants" / "Create component showcase"
+```bash
+node src/index.js ds showcase button      # All 9 button variants side by side
+node src/index.js ds showcase button -d col  # Vertical layout
+```
+
+### "Create a dashboard page" / "Create a form page"
+```bash
+# Full page layouts using DS components
+node src/index.js ds page dashboard
+node src/index.js ds page form
+node src/index.js ds page landing
+node src/index.js ds page settings
+
+# Mobile versions
+node src/index.js ds page dashboard --mobile
+node src/index.js ds page form --mobile
+
+# Custom width and name
+node src/index.js ds page landing -w 1200 --name "Marketing Page"
+```
+
+### "Push design tokens to Figma" / "Create variables from design system"
+```bash
+# Push ALL 322 tokens as Figma variables (creates collections)
+node src/index.js ds tokens push
+
+# Push only a specific category
+node src/index.js ds tokens push --category colors
+node src/index.js ds tokens push --category spacing
+node src/index.js ds tokens push --category typography
+
+# Add dark mode to color variables
+node src/index.js ds tokens push-dark
+
+# Dry run (preview what will be created)
+node src/index.js ds tokens push --dry-run
+
+# List tokens by category
+node src/index.js ds tokens list
+node src/index.js ds tokens list -c colors
+node src/index.js ds tokens list -c spacing
+```
+
+### "What color is primary?" / "Look up a token value"
+```bash
+node src/index.js ds resolve "colors/primary/main"     # → #4b3fff
+node src/index.js ds resolve "spacing/4"                # → 16px
+node src/index.js ds resolve "sizing/button/medium"     # → 40px
+node src/index.js ds resolve "border-radius/card"       # → 12px
+node src/index.js ds resolve "colors/text/primary" -d   # Dark theme value
+```
+
+### "Search for button tokens" / "Find all spacing tokens"
+```bash
+node src/index.js ds search "button"     # All button-related tokens
+node src/index.js ds search "primary"    # All primary color tokens
+node src/index.js ds search "font-size"  # All font size tokens
+```
+
+### Token Categories
+| Category | Count | Description |
+|----------|-------|-------------|
+| typography | 81 | Font families, sizes, weights, line heights |
+| colors | 70 | Primary, secondary, semantic, text, background |
+| spacing | 21 | 4px grid: 0-128px |
+| sizing | 24 | Button, input, icon, avatar, container sizes |
+| borderRadius | 12 | None to full (9999px) |
+| elevation | 10 | Material Design shadows 0-24 |
+| zIndex | 8 | Stacking layers |
+| components | 74 | Component-specific measurements |
+| transitions | 11 | Animation durations and easing |
+| breakpoints | 11 | Responsive breakpoints |
+
+### Key Token Values (Quick Reference)
+- **Primary color:** #4b3fff
+- **Error:** #d33423, **Warning:** #ed6c02, **Success:** #2e7d32
+- **Font:** DM Sans
+- **Body text:** 14px, **H2:** 24px, **H1:** 48px
+- **Spacing base:** 4px grid (--spacing/4 = 16px)
+- **Button height:** 32px (S), 40px (M), 48px (L)
+- **Border radius:** 4px (small), 8px (medium), 12px (large)
+
+---
+
 ## IMPORTANT: Creating a Full Webpage in Figma
 
 When user asks to "create a website", "design a landing page", or similar:

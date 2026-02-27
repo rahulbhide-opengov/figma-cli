@@ -1,136 +1,166 @@
 # figma-ds-cli
 
 CLI that controls Figma Desktop directly. No API key needed.
+**Has a built-in CDS Design System with 322 tokens and 26 components.**
 
-## IMPORTANT: Design System Commands (ds)
+## CRITICAL: Natural Language Interface
 
-This CLI has a built-in design system engine that reads tokens from `design-system-tokens.ts` (950+ tokens across 10 categories) and can generate Figma components that match the design system exactly.
+**NEVER show `node src/index.js` commands to the user.** The user speaks plain English. You figure out and run the right command silently. The user should never need to know a CLI exists.
 
-### "Show me what design system components are available"
+### How This Works
+1. User says something like "Create a login form" or "Add a button"
+2. You determine the right command from the mappings below
+3. You run the command(s) silently
+4. You report back what was created in plain English
+
+---
+
+## IMPORTANT: CDS Design System is the DEFAULT
+
+This CLI includes the **CDS (Corporate Design System)** with 322 tokens and 26 ready-made components. **ALWAYS use the `ds` commands first** when creating anything. Only fall back to raw `render`/`eval` for custom one-off elements not covered by a component.
+
+### CDS Design System Quick Facts
+- **Primary:** #4b3fff | **Error:** #d33423 | **Warning:** #ed6c02 | **Success:** #2e7d32
+- **Font:** DM Sans | **Body:** 14px | **H2:** 24px | **H1:** 48px
+- **Spacing:** 4px grid (spacing/4 = 16px, spacing/6 = 24px, spacing/8 = 32px)
+- **Button heights:** 32px (S), 40px (M), 48px (L)
+- **Border radius:** 4px (small), 8px (medium/button), 12px (large/card/dialog)
+- **Dark mode:** Full dark theme color set included
+
+---
+
+## IMPORTANT: What Users Say → What You Run
+
+Below is the complete mapping. User says the LEFT side. You silently run the RIGHT side. Never expose the command.
+
+### Creating Components
+
+| User says | You run |
+|-----------|---------|
+| "Create a button" / "Add a button" / "Make a CTA" | `node src/index.js ds create button` |
+| "Create an outlined button" / "Secondary button" | `node src/index.js ds create button -v outlined` |
+| "Create a text button" / "Tertiary button" | `node src/index.js ds create button -v text` |
+| "Create a large submit button" | `node src/index.js ds create button -s large --label "Submit"` |
+| "Create a delete button" / "Destructive button" | `node src/index.js ds create button --color error --label "Delete"` |
+| "Create a disabled button" | `node src/index.js ds create button --disabled --label "Unavailable"` |
+| "Create a text field" / "Add an input" / "Email field" | `node src/index.js ds create textfield --label "Email" --variant outlined` |
+| "Create a filled input" | `node src/index.js ds create textfield --variant filled --label "Name"` |
+| "Create a card" / "Add a content card" | `node src/index.js ds create card --title "Title" --body "Description"` |
+| "Create an outlined card" | `node src/index.js ds create card --title "Title" -v outlined` |
+| "Create a dialog" / "Add a modal" / "Confirmation popup" | `node src/index.js ds create dialog --title "Confirm" --body "Are you sure?"` |
+| "Create a chip" / "Add a tag" / "Filter chip" | `node src/index.js ds create chip --label "Active"` |
+| "Create a primary chip" | `node src/index.js ds create chip --label "Active" --color primary` |
+| "Create a tooltip" | `node src/index.js ds create tooltip` |
+| "Create a snackbar" / "Toast notification" | `node src/index.js ds create snackbar` |
+| "Create a sidebar" / "Navigation menu" / "Sidenav" | `node src/index.js ds create navigation` |
+| "Create breadcrumbs" | `node src/index.js ds create breadcrumb` |
+| "Create a timeline" / "Activity timeline" | `node src/index.js ds create timeline` |
+| "Create a stepper" / "Step indicator" / "Progress steps" | `node src/index.js ds create stepper` |
+| "Create a data table" / "Table" / "Grid" | `node src/index.js ds create datatable` |
+| "Create a page heading" / "Page title section" | `node src/index.js ds create pageheading --title "Page Title"` |
+| "Create a section heading" | `node src/index.js ds create sectionheading --title "Section"` |
+| "Create a form" / "Registration form" / "Sign up form" | `node src/index.js ds create formlayout --title "Form Title"` |
+| "Create an avatar" | `node src/index.js ds create avatar` |
+| "Create an accordion" / "Expandable sections" / "FAQ" | `node src/index.js ds create accordion` |
+| "Create radio buttons" / "Radio group" | `node src/index.js ds create radio` |
+| "Create a toggle" / "Switch" / "On/off toggle" | `node src/index.js ds create switch` |
+| "Create toggle buttons" / "Segmented control" | `node src/index.js ds create togglebutton` |
+| "Create a dropdown" / "Select menu" / "Combobox" | `node src/index.js ds create select` |
+| "Create a skeleton loader" / "Loading placeholder" | `node src/index.js ds create skeleton` |
+| "Create a list" / "Item list" | `node src/index.js ds create list` |
+| "Create a button group" | `node src/index.js ds create buttongroup` |
+| "Create an icon button" | `node src/index.js ds create iconbutton` |
+| "Create a date picker" / "Calendar" | `node src/index.js ds create datepicker` |
+
+### Creating Full Pages
+
+| User says | You run |
+|-----------|---------|
+| "Create a dashboard" / "Dashboard page" / "Overview page" | `node src/index.js ds page dashboard` |
+| "Create a form page" / "Create account page" / "Registration page" | `node src/index.js ds page form` |
+| "Create a landing page" / "Marketing page" / "Homepage" | `node src/index.js ds page landing` |
+| "Create a settings page" / "Preferences page" | `node src/index.js ds page settings` |
+| "Create a mobile dashboard" / "Dashboard for mobile" | `node src/index.js ds page dashboard --mobile` |
+| "Create a mobile form" | `node src/index.js ds page form --mobile` |
+
+### Design System Tokens
+
+| User says | You run |
+|-----------|---------|
+| "Push tokens to Figma" / "Create design variables" / "Set up the design system" | `node src/index.js ds tokens push` |
+| "Push just the colors" / "Create color variables" | `node src/index.js ds tokens push --category colors` |
+| "Push spacing tokens" | `node src/index.js ds tokens push --category spacing` |
+| "Add dark mode" / "Create dark theme" | `node src/index.js ds tokens push-dark` |
+| "What tokens do we have?" / "Show the design system" | `node src/index.js ds info` |
+| "List all components" / "What can you create?" | `node src/index.js ds list` |
+| "Show me all colors" / "List the color tokens" | `node src/index.js ds tokens list -c colors` |
+| "Show spacing scale" | `node src/index.js ds tokens list -c spacing` |
+| "Show typography tokens" | `node src/index.js ds tokens list -c typography` |
+
+### Token Lookups
+
+| User says | You run |
+|-----------|---------|
+| "What's the primary color?" | `node src/index.js ds resolve "colors/primary/main"` |
+| "What color is error?" / "Red color value?" | `node src/index.js ds resolve "colors/error/main"` |
+| "What's the button height?" | `node src/index.js ds resolve "sizing/button/medium"` |
+| "What font do we use?" | `node src/index.js ds resolve "typography/font-family/primary"` |
+| "What's spacing 4?" / "16px spacing token?" | `node src/index.js ds resolve "spacing/4"` |
+| "Card border radius?" | `node src/index.js ds resolve "border-radius/card"` |
+| "Find all button tokens" | `node src/index.js ds search "button"` |
+| "Search for primary" | `node src/index.js ds search "primary"` |
+
+### Showcases & Documentation
+
+| User says | You run |
+|-----------|---------|
+| "Show all button variants" / "Button showcase" | `node src/index.js ds showcase button` |
+| "Show all card styles" | `node src/index.js ds showcase card` |
+| "Document the button component" | `node src/index.js ds showcase button -d col` |
+
+### Complex / Multi-Component Requests
+
+When users ask for something that requires multiple components, compose them:
+
+| User says | What you do |
+|-----------|-------------|
+| "Create a login page" | Run `ds page form` OR compose: pageheading + formlayout (email + password fields) + button |
+| "Create a user profile card" | Run `ds create card --title "John Doe" --body "Senior Designer"` then add avatar with `ds create avatar` |
+| "Create a settings panel with toggles" | Run `ds page settings` which includes accordion + switches |
+| "Create a checkout flow" | Run `ds create stepper` with steps, then `ds create formlayout` for each step |
+| "Design a notification system" | Compose: snackbar + dialog + chip for different notification types |
+| "Create a data dashboard" | Run `ds page dashboard` then add more cards/tables as needed |
+
+For truly custom layouts not covered by any component, use the `render` command with CDS token values:
 ```bash
-node src/index.js ds list
-```
-Shows all 26 components with their variants and sizes.
-
-### "Show design system token stats"
-```bash
-node src/index.js ds info
+node src/index.js render '<Frame name="Custom" w={1200} flex="col" bg="#ffffff" p={32} gap={24} rounded={12}>
+  <Text size={24} weight="700" color="#212121" font="DM Sans">Custom Section</Text>
+  <Text size={14} color="#666666" w="fill">Use CDS token values: primary=#4b3fff, spacing=multiples of 4px</Text>
+</Frame>'
 ```
 
-### "Create a button" / "Create a card" / "Create a dialog"
-```bash
-# Create any DS component in Figma
-node src/index.js ds create button
-node src/index.js ds create card --title "My Card" --body "Description here"
-node src/index.js ds create dialog --title "Confirm Delete"
-node src/index.js ds create textfield --variant outlined --label "Email"
-node src/index.js ds create navigation
-node src/index.js ds create timeline
-node src/index.js ds create datatable
-node src/index.js ds create chip --label "Active" --color primary
-node src/index.js ds create avatar --size large --initials "JD"
-node src/index.js ds create stepper --steps '["Details","Address","Payment"]'
+---
+
+## IMPORTANT: After Setup Show These Examples
+
+When setup is complete, show ONLY natural language examples:
+
+```
+Ready! Your CDS Design System is loaded (322 tokens, 26 components).
+
+Try asking:
+
+  "Create a button"
+  "Design a login form"
+  "Build a dashboard page"
+  "Push design tokens to Figma"
+  "Show all card variants"
+  "What's our primary color?"
+  "Create a navigation sidebar"
+  "Make a mobile settings page"
 ```
 
-Available components: button, textfield, card, dialog, chip, tooltip, snackbar, navigation, breadcrumb, timeline, stepper, datatable, pageheading, sectionheading, formlayout, avatar, accordion, radio, switch, togglebutton, select, skeleton, list, buttongroup, iconbutton, datepicker
-
-### Component options
-```bash
-# Variant: contained, outlined, text, filled, elevated, etc.
-node src/index.js ds create button -v outlined -s large --label "Submit"
-
-# Colors: primary, secondary, error
-node src/index.js ds create button --color error --label "Delete"
-
-# Disabled state
-node src/index.js ds create button --disabled --label "Unavailable"
-
-# Preview JSX without rendering
-node src/index.js ds create card --json
-```
-
-### "Show all button variants" / "Create component showcase"
-```bash
-node src/index.js ds showcase button      # All 9 button variants side by side
-node src/index.js ds showcase button -d col  # Vertical layout
-```
-
-### "Create a dashboard page" / "Create a form page"
-```bash
-# Full page layouts using DS components
-node src/index.js ds page dashboard
-node src/index.js ds page form
-node src/index.js ds page landing
-node src/index.js ds page settings
-
-# Mobile versions
-node src/index.js ds page dashboard --mobile
-node src/index.js ds page form --mobile
-
-# Custom width and name
-node src/index.js ds page landing -w 1200 --name "Marketing Page"
-```
-
-### "Push design tokens to Figma" / "Create variables from design system"
-```bash
-# Push ALL 322 tokens as Figma variables (creates collections)
-node src/index.js ds tokens push
-
-# Push only a specific category
-node src/index.js ds tokens push --category colors
-node src/index.js ds tokens push --category spacing
-node src/index.js ds tokens push --category typography
-
-# Add dark mode to color variables
-node src/index.js ds tokens push-dark
-
-# Dry run (preview what will be created)
-node src/index.js ds tokens push --dry-run
-
-# List tokens by category
-node src/index.js ds tokens list
-node src/index.js ds tokens list -c colors
-node src/index.js ds tokens list -c spacing
-```
-
-### "What color is primary?" / "Look up a token value"
-```bash
-node src/index.js ds resolve "colors/primary/main"     # → #4b3fff
-node src/index.js ds resolve "spacing/4"                # → 16px
-node src/index.js ds resolve "sizing/button/medium"     # → 40px
-node src/index.js ds resolve "border-radius/card"       # → 12px
-node src/index.js ds resolve "colors/text/primary" -d   # Dark theme value
-```
-
-### "Search for button tokens" / "Find all spacing tokens"
-```bash
-node src/index.js ds search "button"     # All button-related tokens
-node src/index.js ds search "primary"    # All primary color tokens
-node src/index.js ds search "font-size"  # All font size tokens
-```
-
-### Token Categories
-| Category | Count | Description |
-|----------|-------|-------------|
-| typography | 81 | Font families, sizes, weights, line heights |
-| colors | 70 | Primary, secondary, semantic, text, background |
-| spacing | 21 | 4px grid: 0-128px |
-| sizing | 24 | Button, input, icon, avatar, container sizes |
-| borderRadius | 12 | None to full (9999px) |
-| elevation | 10 | Material Design shadows 0-24 |
-| zIndex | 8 | Stacking layers |
-| components | 74 | Component-specific measurements |
-| transitions | 11 | Animation durations and easing |
-| breakpoints | 11 | Responsive breakpoints |
-
-### Key Token Values (Quick Reference)
-- **Primary color:** #4b3fff
-- **Error:** #d33423, **Warning:** #ed6c02, **Success:** #2e7d32
-- **Font:** DM Sans
-- **Body text:** 14px, **H2:** 24px, **H1:** 48px
-- **Spacing base:** 4px grid (--spacing/4 = 16px)
-- **Button height:** 32px (S), 40px (M), 48px (L)
-- **Border radius:** 4px (small), 8px (medium), 12px (large)
+**NEVER show `node src/index.js` commands. NEVER.** The user just talks. You run commands.
 
 ---
 
@@ -339,21 +369,25 @@ npx --yes capture-website-cli "https://example.com" --output=/tmp/site.png --wid
 ```
 Then `Read /tmp/site.png` to view and analyze visually.
 
-## After Setup: Show Designer-Friendly Examples
+## After Setup: Show Natural Language Examples
 
-When setup is complete, show these natural language examples (NOT CLI commands):
+When setup is complete, show ONLY natural language examples. **NEVER show CLI commands.**
 
 ```
-Ready! Try asking:
+Ready! CDS Design System loaded (322 tokens, 26 components).
 
-"Create a blue rectangle"
-"Add Tailwind colors to my file"
-"Create a card with title and description"
-"Show me what's on the canvas"
-"Find all frames named Button"
+Try:
+  "Create a button"
+  "Design a login form"
+  "Build me a dashboard"
+  "Push design tokens to Figma"
+  "What's our primary color?"
+  "Create a card with title and image"
+  "Show all button variants"
+  "Make a mobile settings page"
 ```
 
-IMPORTANT: Never show `node src/index.js` commands to designers. They just type natural language and you execute the right commands.
+**CRITICAL: NEVER show `node src/index.js` commands to the user. They type natural language. You silently run the right commands and report results in plain English.**
 
 ## Setup
 

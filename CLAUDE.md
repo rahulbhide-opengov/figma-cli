@@ -141,6 +141,269 @@ node src/index.js render '<Frame name="Custom" w={1200} flex="col" bg="#ffffff" 
 
 ---
 
+## CRITICAL: Handling Long / Detailed Prompts (ChatGPT-style)
+
+Users will paste long, detailed prompts describing entire screens, user flows, or multi-section layouts. These prompts may come from ChatGPT, a product spec, or a design brief. **You MUST decompose them into CDS components and build the screen.**
+
+### Step-by-Step Decomposition Process
+
+When you receive a detailed prompt:
+
+**Step 1: Identify the screen type and dimensions**
+- Is it desktop (1440px), tablet (768px), or mobile (375px)?
+- Is it a full page or a single component?
+- What is the primary purpose? (dashboard, form, settings, data view, landing)
+
+**Step 2: Break the prompt into SECTIONS (top to bottom)**
+Read the prompt and mentally divide it into vertical sections. Common patterns:
+- Header / Navigation bar
+- Page heading with breadcrumbs
+- Filter/action bar (search, chips, buttons)
+- Main content (table, cards, form, timeline)
+- Secondary content (sidebar, stats)
+- Footer / Actions
+
+**Step 3: Map each section to CDS components**
+For EACH section, pick the closest CDS component(s):
+
+| Prompt describes... | Use this CDS component |
+|---------------------|----------------------|
+| Navigation / sidebar / menu | `navigation` |
+| Page title, breadcrumbs, description | `pageheading` |
+| Section title with action | `sectionheading` |
+| Form with fields | `formlayout` (customize fields array) |
+| Data table / grid / list of records | `datatable` (customize columns/rows) |
+| Cards showing stats / info | `card` (one per stat) |
+| Filters / tags / categories | `chip` (multiple) |
+| Search input / text input | `textfield` |
+| Action buttons | `button` (set variant, color, label) |
+| Confirmation dialog / modal | `dialog` |
+| Toggle settings / preferences | `switch` or `accordion` |
+| Progress / steps / wizard | `stepper` |
+| Activity feed / history | `timeline` |
+| User avatars / profiles | `avatar` |
+| Dropdown / select menus | `select` |
+| Loading states | `skeleton` |
+| Notifications / alerts | `snackbar` |
+| Radio options / single select | `radio` |
+| Date selection | `datepicker` |
+
+**Step 4: Build it using `render` with ONE parent frame**
+
+**CRITICAL: Always create ONE parent frame containing all sections.** Never create sections as separate floating frames.
+
+Use the `render` command to build a complete screen with nested components. Construct the JSX by:
+1. Creating the outer `<Frame>` with the page dimensions and `flex="col"`
+2. Nesting each section as a child `<Frame>`
+3. Using CDS token values for ALL colors, spacing, typography, and sizing
+4. Getting component JSX from `ds create <component> --json` for reference
+
+### CDS Token Cheat Sheet (Use These Values ALWAYS)
+
+```
+COLORS:
+  Primary:        #4b3fff    (buttons, active states, links)
+  Primary Light:  #7b6bff    (hover backgrounds)
+  Primary Dark:   #3829cc    (pressed states)
+  Error:          #d33423    (errors, delete buttons)
+  Warning:        #ed6c02    (warnings)
+  Success:        #2e7d32    (success states)
+  Info:           #0288d1    (info messages)
+  Text Primary:   #212121    (headings, body text)
+  Text Secondary: #666666    (descriptions, labels, placeholders)
+  Text Disabled:  #9e9e9e    (disabled text)
+  Background:     #ffffff    (page background)
+  Paper:          #ffffff    (card/panel background)
+  Elevation 1:    #f5f5f5    (table headers, subtle backgrounds)
+  Border:         #e0e0e0    (borders, dividers)
+  Hover:          #f5f5f5    (row/item hover)
+  Selected:       rgba(75,63,255,0.08)  (selected items)
+
+TYPOGRAPHY (font: "DM Sans"):
+  Display 1:  80px / 700 weight (hero titles, desktop only)
+  Display 2:  60px / 700 weight (secondary heroes)
+  H1:         48px / 700 weight (page titles desktop)
+  H2:         24px / 700 weight (section titles, mobile page titles)
+  H3:         20px / 700 weight (subsection titles, card titles)
+  H4:         18px / 700 weight (smaller headings)
+  Body Large: 16px / 400 weight (important body text)
+  Body Med:   14px / 400 weight (default body text)
+  Body Small: 12px / 400 weight (captions, helper text)
+  Button:     14px / 700 weight (button labels)
+  Overline:   12px / 700 weight (uppercase labels)
+
+SPACING (4px grid):
+  4px  (tight)    8px  (small)     12px (compact)
+  16px (default)  20px (medium)    24px (comfortable)
+  32px (large)    48px (section)   80px (page padding)
+
+SIZING:
+  Button:  32px (S)  40px (M)  48px (L)
+  Input:   32px (S)  40px (M)  48px (L)
+  Icon:    16px (S)  24px (M)  32px (L)  40px (XL)
+  Avatar:  24px (S)  40px (M)  56px (L)  96px (XL)
+  Nav:     256px (default)  64px (slim)
+
+BORDER RADIUS:
+  4px  (small/input/tooltip)
+  8px  (medium/button)
+  12px (large/card/dialog)
+  16px (xlarge/chip)
+  9999px (full/circle/pill)
+
+ELEVATION (shadows):
+  Cards:    shadow="0 2 8 #0000001a"
+  Dropdowns: shadow="0 4 12 #0000001a"
+  Dialogs:  shadow="0 8 24 #00000033"
+```
+
+### Example: Decomposing a Long Prompt
+
+**User prompt:**
+> "Design a User Management screen. It should have a sidebar navigation on the left with items for Dashboard, Users (active), Roles, and Settings. The main content area should have a page heading 'User Management' with breadcrumbs showing Home > Admin > Users. Below the heading there should be a search input, filter chips for Active/Inactive/All, and an 'Add User' button aligned to the right. Then a data table with columns: Name, Email, Role, Status, and Actions. Show 5 sample rows. At the bottom of the table show pagination info."
+
+**Your decomposition:**
+
+1. **Outer layout**: 1440px, horizontal split (nav 256px + content area)
+2. **Left**: `navigation` with items [Dashboard, Users, Roles, Settings], activeIndex=1
+3. **Right content area**: vertical stack
+   - `pageheading` with title="User Management", breadcrumbs=["Home","Admin"]
+   - **Filter bar**: horizontal row with `textfield` (search) + `chip` x3 + `button` (Add User)
+   - `datatable` with 5 columns and 5 rows
+   - **Pagination**: text footer
+
+**Then build as ONE render command:**
+```bash
+node src/index.js render '<Frame name="User Management" w={1440} h={900} flex="row" bg="#ffffff">
+  <Frame name="Sidebar" w={256} h="fill" flex="col" bg="#ffffff" py={8} stroke="#e0e0e0" strokeWidth={1}>
+    <Frame w="fill" h={64} flex="row" items="center" px={16} gap={12}>
+      <Frame w={32} h={32} bg="#4b3fff" rounded={8} />
+      <Text size={16} weight="700" color="#212121">Admin Panel</Text>
+    </Frame>
+    <Frame w="fill" h={1} bg="#e0e0e0" />
+    <Frame w="fill" h={48} flex="row" items="center" px={16} gap={16} rounded={8}>
+      <Frame w={24} h={24} bg="#212121" rounded={4} opacity={0.4} />
+      <Text size={14} color="#212121">Dashboard</Text>
+    </Frame>
+    <Frame w="fill" h={48} flex="row" items="center" px={16} gap={16} bg="rgba(75,63,255,0.08)" rounded={8}>
+      <Frame w={24} h={24} bg="#4b3fff" rounded={4} opacity={0.4} />
+      <Text size={14} weight="700" color="#4b3fff">Users</Text>
+    </Frame>
+    <Frame w="fill" h={48} flex="row" items="center" px={16} gap={16} rounded={8}>
+      <Frame w={24} h={24} bg="#212121" rounded={4} opacity={0.4} />
+      <Text size={14} color="#212121">Roles</Text>
+    </Frame>
+    <Frame w="fill" h={48} flex="row" items="center" px={16} gap={16} rounded={8}>
+      <Frame w={24} h={24} bg="#212121" rounded={4} opacity={0.4} />
+      <Text size={14} color="#212121">Settings</Text>
+    </Frame>
+  </Frame>
+  <Frame name="Content" grow={1} flex="col" p={32} gap={24}>
+    <Frame flex="row" items="center" gap={8}>
+      <Text size={14} color="#666666">Home</Text>
+      <Text size={14} color="#9e9e9e">/</Text>
+      <Text size={14} color="#666666">Admin</Text>
+      <Text size={14} color="#9e9e9e">/</Text>
+      <Text size={14} weight="500" color="#212121">Users</Text>
+    </Frame>
+    <Text size={24} weight="700" color="#212121">User Management</Text>
+    <Frame name="Filters" w="fill" flex="row" items="center" gap={12}>
+      <Frame w={280} h={40} flex="row" items="center" px={12} bg="#ffffff" stroke="#e0e0e0" strokeWidth={1} rounded={4} grow={1}>
+        <Text size={14} color="#9e9e9e">Search users...</Text>
+      </Frame>
+      <Frame h={32} px={12} flex="row" items="center" bg="rgba(75,63,255,0.08)" rounded={16}>
+        <Text size={13} weight="500" color="#4b3fff">Active</Text>
+      </Frame>
+      <Frame h={32} px={12} flex="row" items="center" bg="#e0e0e0" rounded={16}>
+        <Text size={13} weight="500" color="#212121">Inactive</Text>
+      </Frame>
+      <Frame h={32} px={12} flex="row" items="center" bg="#e0e0e0" rounded={16}>
+        <Text size={13} weight="500" color="#212121">All</Text>
+      </Frame>
+      <Frame h={40} px={16} flex="row" items="center" bg="#4b3fff" rounded={8}>
+        <Text size={14} weight="700" color="#ffffff">Add User</Text>
+      </Frame>
+    </Frame>
+    <Frame name="Table" w="fill" flex="col" stroke="#e0e0e0" strokeWidth={1} rounded={8} overflow="hidden">
+      <Frame w="fill" flex="row" bg="#f5f5f5">
+        <Frame w={200} h={48} flex="row" items="center" px={16}><Text size={14} weight="700" color="#212121">Name</Text></Frame>
+        <Frame w={240} h={48} flex="row" items="center" px={16}><Text size={14} weight="700" color="#212121">Email</Text></Frame>
+        <Frame w={140} h={48} flex="row" items="center" px={16}><Text size={14} weight="700" color="#212121">Role</Text></Frame>
+        <Frame w={120} h={48} flex="row" items="center" px={16}><Text size={14} weight="700" color="#212121">Status</Text></Frame>
+        <Frame grow={1} h={48} flex="row" items="center" px={16}><Text size={14} weight="700" color="#212121">Actions</Text></Frame>
+      </Frame>
+      <Frame w="fill" flex="row" stroke="#e0e0e0" strokeWidth={1}>
+        <Frame w={200} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">Sarah Johnson</Text></Frame>
+        <Frame w={240} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">sarah@company.com</Text></Frame>
+        <Frame w={140} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">Admin</Text></Frame>
+        <Frame w={120} h={52} flex="row" items="center" px={16}><Frame h={24} px={8} bg="#2e7d32" rounded={12}><Text size={12} color="#ffffff">Active</Text></Frame></Frame>
+        <Frame grow={1} h={52} flex="row" items="center" px={16}><Text size={12} color="#4b3fff">Edit</Text></Frame>
+      </Frame>
+      <Frame w="fill" flex="row" stroke="#e0e0e0" strokeWidth={1}>
+        <Frame w={200} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">Mike Chen</Text></Frame>
+        <Frame w={240} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">mike@company.com</Text></Frame>
+        <Frame w={140} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">Editor</Text></Frame>
+        <Frame w={120} h={52} flex="row" items="center" px={16}><Frame h={24} px={8} bg="#2e7d32" rounded={12}><Text size={12} color="#ffffff">Active</Text></Frame></Frame>
+        <Frame grow={1} h={52} flex="row" items="center" px={16}><Text size={12} color="#4b3fff">Edit</Text></Frame>
+      </Frame>
+      <Frame w="fill" flex="row" stroke="#e0e0e0" strokeWidth={1}>
+        <Frame w={200} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">Lisa Park</Text></Frame>
+        <Frame w={240} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">lisa@company.com</Text></Frame>
+        <Frame w={140} h={52} flex="row" items="center" px={16}><Text size={14} color="#212121">Viewer</Text></Frame>
+        <Frame w={120} h={52} flex="row" items="center" px={16}><Frame h={24} px={8} bg="#9e9e9e" rounded={12}><Text size={12} color="#ffffff">Inactive</Text></Frame></Frame>
+        <Frame grow={1} h={52} flex="row" items="center" px={16}><Text size={12} color="#4b3fff">Edit</Text></Frame>
+      </Frame>
+    </Frame>
+    <Frame w="fill" flex="row" items="center" justify="between">
+      <Text size={12} color="#666666">Showing 1-3 of 48 users</Text>
+      <Frame flex="row" gap={8}>
+        <Frame w={32} h={32} flex="row" items="center" justify="center" stroke="#e0e0e0" strokeWidth={1} rounded={4}><Text size={12} color="#666666">←</Text></Frame>
+        <Frame w={32} h={32} flex="row" items="center" justify="center" bg="#4b3fff" rounded={4}><Text size={12} color="#ffffff">1</Text></Frame>
+        <Frame w={32} h={32} flex="row" items="center" justify="center" stroke="#e0e0e0" strokeWidth={1} rounded={4}><Text size={12} color="#212121">2</Text></Frame>
+        <Frame w={32} h={32} flex="row" items="center" justify="center" stroke="#e0e0e0" strokeWidth={1} rounded={4}><Text size={12} color="#212121">3</Text></Frame>
+        <Frame w={32} h={32} flex="row" items="center" justify="center" stroke="#e0e0e0" strokeWidth={1} rounded={4}><Text size={12} color="#666666">→</Text></Frame>
+      </Frame>
+    </Frame>
+  </Frame>
+</Frame>'
+```
+
+### Rules for Building Screens from Prompts
+
+1. **ALWAYS use ONE parent frame** with `flex="col"` or `flex="row"` for the whole screen
+2. **ALWAYS use CDS token values** from the cheat sheet above — never guess colors or sizes
+3. **ALWAYS use `w="fill"` on child sections** so they stretch to parent width
+4. **Use semantic naming**: name each `<Frame>` clearly (e.g. "Sidebar", "FilterBar", "Table")
+5. **For layouts with sidebars**: outer frame `flex="row"`, sidebar fixed width, content `grow={1}`
+6. **For stacked sections**: outer frame `flex="col"`, each section `w="fill"`
+7. **Button sizing**: 40px height (medium) is the default, use 48px for primary CTAs
+8. **Text hierarchy**: H2 (24px) for page title, H3 (20px) for section title, 14px for body
+9. **Consistent spacing**: 32px page padding, 24px between sections, 16px within components, 8px tight gaps
+10. **Status badges**: use small rounded frames with semantic colors (green=active, red=error, gray=inactive)
+11. **If the prompt mentions responsive/mobile**: create a second frame at 375px width with stacked layout, larger touch targets (48px), and simplified navigation
+12. **If the prompt mentions dark mode**: swap background to #121212, paper to #1e1e1e, text to rgba(255,255,255,0.87), borders to rgba(255,255,255,0.12)
+
+### Handling Ambiguity in Prompts
+
+- If the prompt says "table" or "list of items" → use `datatable` or build a custom table with `<Frame>` rows
+- If the prompt says "form" → use `formlayout` or build custom with `textfield` components
+- If the prompt says "navigation" without specifics → default to left sidebar (256px)
+- If the prompt says "cards" without count → create 3 cards in a row
+- If the prompt says "responsive" → create both desktop (1440px) and mobile (375px) versions
+- If the prompt doesn't specify colors → use CDS defaults (primary=#4b3fff, bg=#ffffff)
+- If the prompt says "modern" / "clean" → CDS already IS clean and modern, just use it
+- If the prompt mentions specific data → use that data in the components (table rows, card titles, etc.)
+- If the prompt says "like Google/Material" → CDS is Material-based, so you're already matching
+
+### Building Multiple Screens
+
+If the prompt describes multiple screens (e.g. "create the user list screen AND the user detail screen"):
+1. Build each screen as a separate `render` command
+2. Smart positioning will place them side-by-side automatically
+3. Name each frame clearly: "User List", "User Detail"
+
+---
+
 ## IMPORTANT: After Setup Show These Examples
 
 When setup is complete, show ONLY natural language examples:

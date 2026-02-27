@@ -4489,6 +4489,71 @@ ds
     }
   });
 
+// ds compose - build a custom screen from a JSON definition
+ds
+  .command('compose')
+  .description('Compose a custom screen from a JSON section definition')
+  .argument('<json>', 'JSON config: { name, width, bg, sections: [{ component, options, wrapper }] }')
+  .option('--mobile', 'Use mobile width (375px)')
+  .option('--file <path>', 'Read JSON config from file instead of argument')
+  .action(async (jsonStr, options) => {
+    await checkConnection();
+    const spinner = ora('Composing screen...').start();
+
+    try {
+      let config;
+      if (options.file) {
+        config = JSON.parse(readFileSync(options.file, 'utf-8'));
+      } else {
+        config = JSON.parse(jsonStr);
+      }
+
+      if (options.mobile) {
+        config.width = 375;
+      }
+
+      const jsx = componentRegistry.buildPage(config);
+      const posX = getNextFreeX();
+      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
+      const output = execSync(cmd, {
+        input: jsx,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 60000
+      });
+      const result = JSON.parse(output.trim());
+      spinner.succeed(`Screen created: ${result.id}`);
+      if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
+    } catch (e) {
+      spinner.fail(`Compose failed: ${e.message}`);
+    }
+  });
+
+// ds render-screen - render raw JSX for a fully custom screen
+ds
+  .command('render-screen <jsx>')
+  .description('Render a fully custom screen using raw JSX (for complex layouts not covered by components)')
+  .action(async (jsx, options) => {
+    await checkConnection();
+    const spinner = ora('Rendering screen...').start();
+
+    try {
+      const posX = getNextFreeX();
+      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
+      const output = execSync(cmd, {
+        input: jsx,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 60000
+      });
+      const result = JSON.parse(output.trim());
+      spinner.succeed(`Screen created: ${result.id}`);
+      if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
+    } catch (e) {
+      spinner.fail(`Render failed: ${e.stderr || e.message}`);
+    }
+  });
+
 // ds resolve <token> - resolve a token value
 ds
   .command('resolve <token>')

@@ -210,6 +210,84 @@ function killFigma() {
   }
 }
 
+/**
+ * Check if Figma debug port (9222) is reachable.
+ * Returns: { connected: bool, hasDesignFile: bool, pages: [] }
+ */
+function checkDebugPort() {
+  try {
+    const result = execSync('curl -s http://localhost:9222/json', {
+      encoding: 'utf8', stdio: 'pipe', timeout: 2000
+    });
+    const pages = JSON.parse(result);
+    const designFile = pages.find(p =>
+      p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file')
+    );
+    return { connected: true, hasDesignFile: !!designFile, pages, designFile };
+  } catch {
+    return { connected: false, hasDesignFile: false, pages: [], designFile: null };
+  }
+}
+
+/**
+ * Check if Figma process is running (regardless of debug port).
+ */
+function isFigmaProcessRunning() {
+  try {
+    if (IS_MAC) {
+      const ps = execSync('pgrep -x Figma', { encoding: 'utf8', stdio: 'pipe' });
+      return ps.trim().length > 0;
+    } else if (IS_WINDOWS) {
+      const ps = execSync('tasklist /FI "IMAGENAME eq Figma.exe" /NH', { encoding: 'utf8', stdio: 'pipe' });
+      return ps.includes('Figma.exe');
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure Figma is running with debug port. NEVER kills Figma.
+ * - If debug port reachable → returns true (already good)
+ * - If Figma running without debug port → tells user, returns false
+ * - If Figma not running → starts it with debug flag, returns 'started'
+ */
+async function ensureFigmaRunning() {
+  // First check if debug port is already open
+  const status = checkDebugPort();
+  if (status.connected) return { ok: true, status };
+
+  // Debug port not reachable — check if Figma is running at all
+  const running = isFigmaProcessRunning();
+  if (running) {
+    // Figma is running but without debug port
+    console.log(chalk.yellow('\n  Figma is running but without the debug connection.'));
+    console.log(chalk.white('  To enable it, please restart Figma manually:\n'));
+    console.log(chalk.cyan('    1. Quit Figma (Cmd+Q / Alt+F4)'));
+    console.log(chalk.cyan('    2. Then run this command again\n'));
+    console.log(chalk.gray('  We\'ll start Figma with the debug port enabled for you.'));
+    return { ok: false, reason: 'no-debug-port' };
+  }
+
+  // Figma not running at all — start it (no need to kill anything)
+  console.log(chalk.blue('  Starting Figma with debug connection...'));
+  startFigma();
+
+  // Wait for debug port
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const check = checkDebugPort();
+    if (check.connected) {
+      console.log(chalk.green('  ✓ Figma started'));
+      return { ok: true, status: check };
+    }
+  }
+
+  console.log(chalk.green('  ✓ Figma started (waiting for file to load)'));
+  return { ok: true, status: checkDebugPort() };
+}
+
 function getManualStartCommand() {
   if (IS_MAC) {
     return 'open -a Figma --args --remote-debugging-port=9222';
@@ -625,31 +703,17 @@ program.action(async () => {
       }
     }
 
-    // Step 3: Start Figma
-    console.log(chalk.blue('\nStep 3/3: ') + 'Starting Figma...');
-    try {
-      killFigma();
-      await new Promise(r => setTimeout(r, 1000));
-      startFigma();
-      console.log(chalk.green('  ✓ Figma started'));
+    // Step 3: Ensure Figma is running
+    console.log(chalk.blue('\nStep 3/3: ') + 'Connecting to Figma...');
+    const figmaResult = await ensureFigmaRunning();
 
-      // Wait for connection
-      const spinner = ora('  Waiting for connection...').start();
-      let connected = false;
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        connected = await FigmaClient.isConnected();
-        if (connected) break;
-      }
-
-      if (connected) {
-        spinner.succeed('Connected to Figma');
+    if (figmaResult.ok) {
+      if (figmaResult.status?.hasDesignFile) {
+        const title = figmaResult.status.designFile.title.replace(' – Figma', '');
+        console.log(chalk.green(`  ✓ Connected to: ${title}`));
       } else {
-        spinner.warn('Connection pending - open a file in Figma');
+        console.log(chalk.green('  ✓ Figma running — open a design file to start'));
       }
-    } catch (error) {
-      console.log(chalk.yellow('  ! Could not start Figma automatically'));
-      console.log(chalk.gray('    Start manually: ' + getManualStartCommand()));
     }
 
     // Done!
@@ -661,41 +725,22 @@ program.action(async () => {
   // Already set up - check connection and show status
   showBanner();
 
-  const connected = await FigmaClient.isConnected();
-  if (connected) {
+  const debugStatus = checkDebugPort();
+  if (debugStatus.connected && debugStatus.hasDesignFile) {
+    const title = debugStatus.designFile.title.replace(' – Figma', '');
     console.log(chalk.green('  ✓ Connected to Figma\n'));
-    try {
-      const client = new FigmaClient();
-      await client.connect();
-      const info = await client.getPageInfo();
-      console.log(chalk.gray(`  File: ${client.pageTitle.replace(' – Figma', '')}`));
-      console.log(chalk.gray(`  Page: ${info.name}`));
-      client.close();
-    } catch {}
+    console.log(chalk.gray(`  File: ${title}`));
     console.log();
     showQuickStart();
+  } else if (debugStatus.connected) {
+    console.log(chalk.green('  ✓ Figma is running\n'));
+    console.log(chalk.gray('  Open a design file in Figma, then share the link.\n'));
+    showQuickStart();
   } else {
-    console.log(chalk.yellow('  ⚠ Figma not connected\n'));
-    console.log(chalk.white('  Starting Figma...'));
-    try {
-      killFigma();
-      await new Promise(r => setTimeout(r, 500));
-      startFigma();
-      console.log(chalk.green('  ✓ Figma started\n'));
-
-      const spinner = ora('  Waiting for connection...').start();
-      for (let i = 0; i < 8; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        if (await FigmaClient.isConnected()) {
-          spinner.succeed('Connected to Figma\n');
-          showQuickStart();
-          return;
-        }
-      }
-      spinner.warn('Open a file in Figma to connect\n');
+    const figmaResult = await ensureFigmaRunning();
+    if (figmaResult.ok) {
+      console.log();
       showQuickStart();
-    } catch {
-      console.log(chalk.gray('  Start manually: ' + getManualStartCommand() + '\n'));
     }
   }
 });
@@ -785,44 +830,22 @@ program
       }
     }
 
-    // Step 3: Start Figma
-    console.log(chalk.blue('\nStep 3/3: ') + 'Starting Figma...');
-    try {
-      killFigma();
-      await new Promise(r => setTimeout(r, 1000));
-      startFigma();
-      console.log(chalk.green('  ✓ Figma started'));
+    // Step 3: Connect to Figma (never kills it)
+    console.log(chalk.blue('\nStep 3/3: ') + 'Connecting to Figma...');
+    const figmaResult = await ensureFigmaRunning();
 
-      // Wait for connection
-      const spinner = ora('  Waiting for connection...').start();
-      let connected = false;
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        connected = await FigmaClient.isConnected();
-        if (connected) break;
-      }
-
-      if (connected) {
-        spinner.succeed('Connected to Figma');
+    if (figmaResult.ok) {
+      if (figmaResult.status?.hasDesignFile) {
+        const title = figmaResult.status.designFile.title.replace(' – Figma', '');
+        console.log(chalk.green(`  ✓ Connected to: ${title}`));
       } else {
-        spinner.warn('Connection pending - open a file in Figma');
+        console.log(chalk.green('  ✓ Figma running — share a Figma file link to start designing'));
       }
-    } catch (error) {
-      console.log(chalk.yellow('  ! Could not start Figma automatically'));
-      console.log(chalk.gray('    Start manually: ' + getManualStartCommand()));
     }
 
     // Done!
     console.log(chalk.green('\n  ✓ Setup complete!\n'));
-
-    console.log(chalk.white('  Quick start:\n'));
-    console.log(chalk.gray('    Create Tailwind colors    ') + chalk.cyan('figma-ds-cli tokens tailwind'));
-    console.log(chalk.gray('    Create spacing scale      ') + chalk.cyan('figma-ds-cli tokens spacing'));
-    console.log(chalk.gray('    List all variables        ') + chalk.cyan('figma-ds-cli var list'));
-    console.log(chalk.gray('    Render JSX to Figma       ') + chalk.cyan('figma-ds-cli render \'<Frame>...</Frame>\''));
-    console.log(chalk.gray('    See all commands          ') + chalk.cyan('figma-ds-cli --help'));
-    console.log();
-    console.log(chalk.gray('  Learn more: ') + chalk.cyan('https://intodesignsystems.com\n'));
+    console.log(chalk.white('  Next: share a Figma file link to start creating designs.\n'));
   });
 
 // ============ SETUP (alias for init) ============
@@ -996,16 +1019,14 @@ program
 
 program
   .command('connect [url]')
-  .description('Connect to Figma Desktop. Optionally pass a Figma file URL to target a specific file.')
-  .option('-f, --force', 'Force restart Figma even if already connected')
-  .action(async (url, options) => {
-    // Fun welcome message
+  .description('Connect to a Figma file. Pass a Figma URL to target a specific file.')
+  .action(async (url) => {
     console.log(chalk.hex('#FF6B35')('\n  ✨ Hey designer! ') + chalk.white("Don't be afraid of the terminal!"));
     console.log(chalk.hex('#4ECDC4')('  🎨 Happy vibe coding! ') + chalk.gray('— Sil · ') + chalk.hex('#FF6B35')('intodesignsystems.com\n'));
 
     const config = loadConfig();
 
-    // Patch Figma if needed (one-time)
+    // Patch Figma if needed (one-time, does NOT kill Figma)
     if (!config.patched) {
       const patchSpinner = ora('Setting up Figma connection...').start();
       try {
@@ -1013,15 +1034,15 @@ program
         if (patchStatus === true) {
           patchSpinner.succeed('Figma ready');
         } else if (patchStatus === false) {
-          // Need to close Figma to patch, but only this once
-          console.log(chalk.yellow('  First-time setup: Figma will restart once to enable connection.'));
-          try { killFigma(); await new Promise(r => setTimeout(r, 500)); } catch {}
+          // Patching requires Figma to not be running — check first
+          if (isFigmaProcessRunning()) {
+            patchSpinner.warn('Figma needs to be patched (one-time)');
+            console.log(chalk.yellow('\n  Please quit Figma manually (Cmd+Q), then run this command again.'));
+            console.log(chalk.gray('  This is a one-time setup to enable the debug connection.\n'));
+            return;
+          }
           patchFigma();
-          patchSpinner.succeed('Figma configured');
-          // Restart after patch
-          startFigma();
-          console.log(chalk.green('  ✓ Figma restarted after patching'));
-          await new Promise(r => setTimeout(r, 3000));
+          patchSpinner.succeed('Figma configured (one-time patch applied)');
         } else {
           patchSpinner.succeed('Figma ready');
         }
@@ -1029,19 +1050,11 @@ program
         saveConfig(config);
       } catch (err) {
         patchSpinner.fail('Setup failed');
-
         if (process.platform === 'darwin') {
-          console.log(chalk.hex('#FF6B35')('\n  ┌─────────────────────────────────────────────────────┐'));
-          console.log(chalk.hex('#FF6B35')('  │') + chalk.white.bold('  One-time setup required                           ') + chalk.hex('#FF6B35')('│'));
-          console.log(chalk.hex('#FF6B35')('  └─────────────────────────────────────────────────────┘\n'));
-
-          console.log(chalk.white('  Your Terminal needs permission to configure Figma.\n'));
-
-          console.log(chalk.cyan('  Step 1: ') + chalk.white('Open ') + chalk.yellow('System Settings'));
-          console.log(chalk.cyan('  Step 2: ') + chalk.white('Go to ') + chalk.yellow('Privacy & Security → Full Disk Access'));
-          console.log(chalk.cyan('  Step 3: ') + chalk.white('Click ') + chalk.yellow('+') + chalk.white(' and add ') + chalk.yellow('Terminal'));
-          console.log(chalk.cyan('  Step 4: ') + chalk.white('Quit Terminal completely ') + chalk.gray('(Cmd+Q)'));
-          console.log(chalk.cyan('  Step 5: ') + chalk.white('Reopen Terminal and try again\n'));
+          console.log(chalk.white('\n  Your Terminal needs "Full Disk Access" permission.\n'));
+          console.log(chalk.cyan('  1. ') + chalk.white('Open ') + chalk.yellow('System Settings → Privacy & Security → Full Disk Access'));
+          console.log(chalk.cyan('  2. ') + chalk.white('Click + and add ') + chalk.yellow('Terminal'));
+          console.log(chalk.cyan('  3. ') + chalk.white('Quit Terminal (Cmd+Q) and reopen\n'));
         } else {
           console.log(chalk.yellow('\n  Try running as administrator.\n'));
         }
@@ -1049,123 +1062,34 @@ program
       }
     }
 
-    // --- Smart connection: check if Figma is already running with debug port ---
-    let alreadyConnected = false;
-    let connectedFile = null;
-    try {
-      const result = execSync('curl -s http://localhost:9222/json', {
-        encoding: 'utf8', stdio: 'pipe', timeout: 2000
-      });
-      const pages = JSON.parse(result);
-      const figmaPage = pages.find(p =>
-        p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file')
-      );
-      if (figmaPage) {
-        alreadyConnected = true;
-        connectedFile = figmaPage.title.replace(' – Figma', '');
-      }
-    } catch {
-      // Port not open — Figma not running with debug or not running at all
-    }
+    // --- NEVER kill Figma. Just ensure it's reachable. ---
+    const figmaResult = await ensureFigmaRunning();
+    if (!figmaResult.ok) return;
 
-    // If already connected and no --force flag, reuse the existing connection
-    if (alreadyConnected && !options.force) {
-      console.log(chalk.green('✓ Figma is already running'));
-      console.log(chalk.gray(`  Connected to: ${connectedFile}`));
-
-      // If user provided a URL, check if we need to navigate to it
-      if (url) {
-        const targetConnected = await navigateToFigmaFile(url);
-        if (!targetConnected) {
-          console.log(chalk.yellow('\n  Could not navigate to the file. Please open it manually in Figma.'));
-          console.log(chalk.cyan(`  URL: ${url}\n`));
-        }
+    // If user provided a URL, navigate to that file
+    if (url) {
+      const navigated = await navigateToFigmaFile(url);
+      if (navigated) {
+        config.lastFileUrl = url;
+        saveConfig(config);
+      } else {
+        console.log(chalk.yellow('  Could not navigate to the file automatically.'));
+        console.log(chalk.cyan(`  Please open it in Figma: ${url}\n`));
       }
     } else {
-      // Figma not running with debug port, or --force was used
-      if (options.force && alreadyConnected) {
-        console.log(chalk.yellow('  Force restart requested...'));
-        try { killFigma(); await new Promise(r => setTimeout(r, 1000)); } catch {}
-      }
-
-      // Check if Figma is running WITHOUT debug port
-      let figmaRunningNoDebug = false;
-      try {
-        if (IS_MAC) {
-          const ps = execSync('pgrep -x Figma', { encoding: 'utf8', stdio: 'pipe' });
-          figmaRunningNoDebug = ps.trim().length > 0;
-        } else if (IS_WINDOWS) {
-          const ps = execSync('tasklist /FI "IMAGENAME eq Figma.exe" /NH', { encoding: 'utf8', stdio: 'pipe' });
-          figmaRunningNoDebug = ps.includes('Figma.exe');
-        }
-      } catch {}
-
-      if (figmaRunningNoDebug && !options.force) {
-        // Figma is running but without the debug port — need to restart it
-        console.log(chalk.yellow('  Figma is running but without debug connection.'));
-        console.log(chalk.yellow('  Restarting Figma with debug port enabled...'));
-        try { killFigma(); await new Promise(r => setTimeout(r, 1000)); } catch {}
-        startFigma();
-        console.log(chalk.green('  ✓ Figma restarted with debug port'));
-      } else if (!figmaRunningNoDebug && !alreadyConnected) {
-        // Figma not running at all — start it
-        console.log(chalk.blue('  Starting Figma...'));
-        startFigma();
-        console.log(chalk.green('  ✓ Figma started'));
-      } else if (options.force) {
-        startFigma();
-        console.log(chalk.green('  ✓ Figma restarted'));
-      }
-
-      // Wait for connection
-      const spinner = ora('Waiting for connection...').start();
-      let connected = false;
-      for (let i = 0; i < 12; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        try {
-          const result = execSync('curl -s http://localhost:9222/json', {
-            encoding: 'utf8', stdio: 'pipe', timeout: 2000
-          });
-          const pages = JSON.parse(result);
-          const figmaPage = pages.find(p =>
-            p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file')
-          );
-          if (figmaPage) {
-            connectedFile = figmaPage.title.replace(' – Figma', '');
-            spinner.succeed('Connected to Figma');
-            console.log(chalk.gray(`  File: ${connectedFile}`));
-            connected = true;
-            break;
-          }
-          // Debug port open but no design file yet
-          if (pages.length > 0 && i >= 4) {
-            spinner.text = 'Debug port open, waiting for a design file...';
-          }
-        } catch {
-          // Not ready yet
-        }
-      }
-
-      if (!connected) {
-        spinner.warn('Figma is running but no design file is open');
-        if (url) {
-          console.log(chalk.cyan(`\n  Please open this file in Figma: ${url}\n`));
-        } else {
-          console.log(chalk.gray('  Open a design file in Figma to continue.\n'));
-        }
-        // Keep going to start daemon — it will reconnect when file is opened
-      }
-
-      // If user provided a URL, navigate to that file
-      if (url && connected) {
-        await navigateToFigmaFile(url);
+      // No URL — show what's currently connected
+      const status = checkDebugPort();
+      if (status.hasDesignFile) {
+        const title = status.designFile.title.replace(' – Figma', '');
+        console.log(chalk.green(`  ✓ Connected to: ${title}`));
+      } else {
+        console.log(chalk.yellow('  Figma is running but no design file is open.'));
+        console.log(chalk.white('  Share a Figma file URL to get started.\n'));
       }
     }
 
-    // Start/restart daemon for fast commands
-    const daemonRunning = isDaemonRunning();
-    if (!daemonRunning || options.force) {
-      if (daemonRunning) stopDaemon();
+    // Start daemon if not running
+    if (!isDaemonRunning()) {
       const daemonSpinner = ora('Starting speed daemon...').start();
       try {
         startDaemon(true);
@@ -1179,16 +1103,10 @@ program
         daemonSpinner.warn('Daemon failed: ' + e.message);
       }
     } else {
-      console.log(chalk.green('✓ Speed daemon already running'));
+      console.log(chalk.green('  ✓ Speed daemon already running'));
     }
 
-    // Save the connected URL if provided
-    if (url) {
-      config.lastFileUrl = url;
-      saveConfig(config);
-    }
-
-    console.log(chalk.green('\n  Ready! Just start asking what you want to create.\n'));
+    console.log(chalk.green('\n  Ready! Share a Figma file link and start creating.\n'));
   });
 
 // ============ VARIABLES ============

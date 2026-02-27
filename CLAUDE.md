@@ -150,9 +150,8 @@ Below is the complete mapping. User says the LEFT side. You silently run the RIG
 | "New file" / "Create a new Figma file" / "Start fresh" | `node src/index.js new-file "File Name"` |
 | "New file called [Name]" | `node src/index.js new-file "[Name]"` |
 | "Switch to a different file" / "Use this file instead" | Ask for URL or new file name, then `connect` or `new-file` |
-| "Figma isn't responding" / "Reconnect" / "Restart Figma" | `node src/index.js connect --force` |
 
-**IMPORTANT:** When a user shares a Figma URL at any point, run `connect` with that URL. Do NOT restart Figma — `connect` reuses the existing connection.
+**IMPORTANT:** The `connect` command NEVER closes or restarts Figma. It only connects to what's already running. If Figma isn't running, it starts it. If it's already running, it reuses the connection.
 
 **IMPORTANT:** Once a file is selected, **stick with it for the entire session**. Never re-ask, never switch unless the user explicitly requests it.
 
@@ -598,39 +597,20 @@ npm install
 node src/index.js connect
 ```
 
-This command is SMART about connections:
-- If Figma is already running with debug port → **reuses existing connection** (no restart)
-- If Figma is running WITHOUT debug port → restarts it once with debug enabled
-- If Figma is not running → starts it with debug enabled
-- Patches Figma only on first-time setup (one-time)
-- **NEVER kills Figma unnecessarily**
+This command **NEVER closes, kills, or restarts Figma**. It only:
+- Checks if Figma's debug port is reachable
+- If Figma isn't running at all → starts it (fresh start, no kill)
+- If Figma is running without debug port → asks user to quit and reopen manually
+- If Figma is running with debug port → uses it as-is
 
 ### If user provides a Figma file URL:
 ```bash
 node src/index.js connect "https://www.figma.com/design/abc123/My-File"
 ```
-This will:
-- Connect to Figma (without restarting if already running)
-- Navigate to that specific file
-- If the file is already open, just confirms it
+This navigates to that file without touching Figma itself.
 
-### If user says "connect to this file" or shares a Figma URL:
-Just run `connect` with the URL. The user doesn't need to know the command.
-
-| User says | You run |
-|-----------|---------|
-| "Initiate project" | `node src/index.js connect` |
-| "Connect to Figma" | `node src/index.js connect` |
-| "Connect to https://figma.com/design/abc..." | `node src/index.js connect "https://figma.com/design/abc..."` |
-| "Use this file: [URL]" | `node src/index.js connect "[URL]"` |
-| "Here's my Figma file: [URL]" | `node src/index.js connect "[URL]"` |
-| "Figma isn't working" / "Reconnect" | `node src/index.js connect --force` |
-
-### Force restart (only when user reports issues):
-```bash
-node src/index.js connect --force
-```
-Use `--force` ONLY when the user says connection is broken or Figma is not responding. Never use it by default.
+### If no URL is provided:
+The agent should ask: "Share a Figma file URL so I can connect to the right file."
 
 If permission error → user needs Full Disk Access (see below).
 
@@ -639,11 +619,10 @@ When connected, show:
 ```
 Ready! CDS Design System loaded (322 tokens, 26 components).
 
-Try:
+Share a Figma file link and try:
   "Create a button"
   "Design a login form"
   "Build me a dashboard"
-  "What's our primary color?"
 ```
 
 ---

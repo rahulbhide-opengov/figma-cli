@@ -25,11 +25,26 @@
 
 import dsEngine from './ds-engine.js';
 
-const { resolveToken, px, toHex, getOpacity, getComponentTokens, getTypographyStyle, getColorGroup } = dsEngine;
+const { resolveToken, resolveResponsiveToken, px, responsivePx, toHex, getOpacity, getComponentTokens, getTypographyStyle, getResponsiveTypographyStyle, getColorGroup, getBreakpointWidths } = dsEngine;
 
-const t = (name) => resolveToken(name) || '';
+let _activeBreakpoint = 'desktop';
+
+/**
+ * Set the active breakpoint for component rendering.
+ * All subsequent component renders will use this breakpoint's token values.
+ * @param {'desktop'|'tablet'|'mobile'} bp
+ */
+export function setBreakpoint(bp) {
+  _activeBreakpoint = ['desktop', 'tablet', 'mobile'].includes(bp) ? bp : 'desktop';
+}
+
+export function getActiveBreakpoint() {
+  return _activeBreakpoint;
+}
+
+const t = (name) => resolveResponsiveToken(name, _activeBreakpoint) || resolveToken(name) || '';
 const h = (name) => toHex(name);
-const p = (name) => px(name);
+const p = (name) => responsivePx(name, _activeBreakpoint);
 
 function colors() {
   return {
@@ -103,10 +118,11 @@ components.button = {
   sizes: ['small', 'medium', 'large'],
   colors: ['primary', 'secondary', 'error'],
 
-  render({ variant = 'contained', size = 'medium', label = 'Button', color = 'primary', disabled = false } = {}) {
+  render({ variant = 'contained', size = 'medium', label = 'Button', color = 'primary', disabled = false, breakpoint } = {}) {
+    if (breakpoint) setBreakpoint(breakpoint);
     const c = colors();
     const btnH = p(`--sizing/button/${size}`);
-    const typo = getTypographyStyle(`button/${size}`);
+    const typo = getResponsiveTypographyStyle(`button/${size}`, _activeBreakpoint);
     const fontSize = typo ? parseInt(typo['font-size']) : 14;
     const fontWeight = typo ? typo['font-weight'] : '500';
     const r = radius('button');
@@ -211,11 +227,11 @@ components.textfield = {
     const c = colors();
     const inputH = p(`--sizing/input/${size}`);
     const r = radius('input');
-    const labelStyle = getTypographyStyle(`input/label/${size}`) || {};
+    const labelStyle = getResponsiveTypographyStyle(`input/label/${size}`, _activeBreakpoint) || {};
     const labelSize = parseInt(labelStyle['font-size'] || '14');
-    const valueStyle = getTypographyStyle(`input/value/${size}`) || {};
+    const valueStyle = getResponsiveTypographyStyle(`input/value/${size}`, _activeBreakpoint) || {};
     const valueSize = parseInt(valueStyle['font-size'] || '16');
-    const helperStyle = getTypographyStyle('input/helper') || {};
+    const helperStyle = getResponsiveTypographyStyle('input/helper', _activeBreakpoint) || {};
     const helperSize = parseInt(helperStyle['font-size'] || '14');
     const borderColor = error ? c.error : c.border;
     const labelColor = error ? c.error : c.textSecondary;
@@ -378,7 +394,7 @@ components.chip = {
     const px_val = 12;
     const r = radius('chip');
     const iconSize = 18;
-    const typo = getTypographyStyle(`chip/${size}`) || {};
+    const typo = getResponsiveTypographyStyle(`chip/${size}`, _activeBreakpoint) || {};
     const fontSize = parseInt(typo['font-size'] || '14');
 
     let bgColor, textColor;
@@ -419,7 +435,7 @@ components.avatar = {
     const c = colors();
     const dim = p(`--sizing/avatar/${size}`);
     const bg = color === 'primary' ? c.primary : color === 'secondary' ? c.secondary : c.grey400;
-    const typo = getTypographyStyle(`avatar/${size}`) || {};
+    const typo = getResponsiveTypographyStyle(`avatar/${size}`, _activeBreakpoint) || {};
     const fontSize = parseInt(typo['font-size'] || String(Math.round(dim * 0.35)));
 
     return `<Frame name="Avatar/${size}" w={${dim}} h={${dim}} bg="${bg}" rounded={${dim}} flex="row" items="center" justify="center">
@@ -456,7 +472,7 @@ components.card = {
   render({ variant = 'elevated', title = 'Card Title', subtitle = '', body = 'Card content goes here.', hasActions = false, width = 320 } = {}) {
     const c = colors();
     const r = radius('card');
-    const h3 = getTypographyStyle('heading/h4') || {};
+    const h3 = getResponsiveTypographyStyle('heading/h4', _activeBreakpoint) || {};
 
     const strokeAttr = variant === 'outlined' ? ` stroke="${c.border}" strokeWidth={1}` : '';
     const shadowAttr = variant === 'elevated' ? ' shadow="0 2 4 #0000001a"' : '';
@@ -495,7 +511,7 @@ components.dialog = {
     const titleH = parseInt(tok['title-height'] || '64');
     const actionsH = parseInt(tok['actions-height'] || '52');
     const actionsSpacing = parseInt(tok['actions-spacing'] || '8');
-    const dialogTypo = getTypographyStyle('dialog/title') || {};
+    const dialogTypo = getResponsiveTypographyStyle('dialog/title', _activeBreakpoint) || {};
 
     return `<Frame name="Dialog/Backdrop" w={800} h={600} flex="col" items="center" justify="center" bg="#00000052">
   <Frame name="Dialog" w={${maxW}} flex="col" bg="${c.bgPaper}" rounded={${r}} shadow="0 8 24 #00000033" overflow="hidden">
@@ -529,7 +545,7 @@ components.alert = {
     const bg = bgMap[severity] || bgMap.info;
     const fg = colorMap[severity] || colorMap.info;
     const r = radius('alert');
-    const alertTitleTypo = getTypographyStyle('alert/title') || {};
+    const alertTitleTypo = getResponsiveTypographyStyle('alert/title', _activeBreakpoint) || {};
 
     const titleJsx = title
       ? `\n    <Text size={${parseInt(alertTitleTypo['font-size'] || '18')}} weight="${alertTitleTypo['font-weight'] || '600'}" color="${fg}">${title}</Text>`
@@ -1750,6 +1766,7 @@ export function listComponents() {
 }
 
 export function renderComponent(name, options = {}) {
+  if (options.breakpoint) setBreakpoint(options.breakpoint);
   const comp = getComponent(name);
   if (!comp) return null;
   return comp.render(options);
@@ -1761,6 +1778,64 @@ export function renderAllVariants(name) {
     return comp ? [comp.render()] : [];
   }
   return comp.renderAll();
+}
+
+/**
+ * Render a component at all 3 breakpoints side by side.
+ * Returns an array of 3 JSX strings: [desktopJsx, tabletJsx, mobileJsx]
+ */
+export function renderResponsive(name, options = {}) {
+  const bpWidths = getBreakpointWidths();
+  const breakpoints = ['desktop', 'tablet', 'mobile'];
+  const results = [];
+
+  for (const bp of breakpoints) {
+    setBreakpoint(bp);
+    const jsx = renderComponent(name, { ...options, breakpoint: bp });
+    if (jsx) {
+      results.push({
+        breakpoint: bp,
+        width: bpWidths[bp],
+        jsx,
+      });
+    }
+  }
+
+  setBreakpoint('desktop');
+  return results;
+}
+
+/**
+ * Render a full page at a specific breakpoint width.
+ * Adjusts the frame width and all component tokens to the breakpoint.
+ */
+export function buildResponsivePage(pageConfig) {
+  const bp = pageConfig.breakpoint || 'desktop';
+  setBreakpoint(bp);
+  const bpWidths = getBreakpointWidths();
+  const width = pageConfig.width || bpWidths[bp];
+  return buildPage({ ...pageConfig, width });
+}
+
+/**
+ * Render a page at all 3 breakpoints.
+ * Returns array of { breakpoint, width, jsx } for batch rendering.
+ */
+export function buildResponsivePageSet(pageConfig) {
+  const bpWidths = getBreakpointWidths();
+  const breakpoints = ['desktop', 'tablet', 'mobile'];
+  const results = [];
+
+  for (const bp of breakpoints) {
+    setBreakpoint(bp);
+    const width = bpWidths[bp];
+    const pageName = `${pageConfig.name || 'Page'} — ${bp.charAt(0).toUpperCase() + bp.slice(1)}`;
+    const jsx = buildPage({ ...pageConfig, name: pageName, width });
+    results.push({ breakpoint: bp, width, jsx });
+  }
+
+  setBreakpoint('desktop');
+  return results;
 }
 
 export function buildPage(pageConfig) {
@@ -1796,6 +1871,11 @@ export default {
   listComponents,
   renderComponent,
   renderAllVariants,
+  renderResponsive,
   buildPage,
+  buildResponsivePage,
+  buildResponsivePageSet,
+  setBreakpoint,
+  getActiveBreakpoint,
   components,
 };

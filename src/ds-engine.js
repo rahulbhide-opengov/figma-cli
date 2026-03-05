@@ -18,6 +18,7 @@ const DEFAULT_TOKEN_PATH = resolve(__dirname, '../design-system/tokens.ts');
 
 let _tokensCache = null;
 let _tokenFilePath = null;
+let _responsiveCache = null;
 
 /**
  * Parse the TypeScript token file and extract all token maps.
@@ -115,6 +116,88 @@ function extractTokenMap(src, varName) {
   }
 
   return tokens;
+}
+
+/**
+ * Load responsive override maps from tokens.ts.
+ * Returns { tablet: {...}, mobile: {...} } with token overrides for each breakpoint.
+ */
+export function loadResponsiveOverrides(filePath) {
+  if (_responsiveCache) return _responsiveCache;
+
+  const tokenPath = filePath || DEFAULT_TOKEN_PATH;
+  const src = readFileSync(tokenPath, 'utf-8');
+
+  _responsiveCache = {
+    tablet: {
+      ...extractTokenMap(src, 'responsiveTypographyTablet'),
+      ...extractTokenMap(src, 'responsiveSizingTablet'),
+      ...extractTokenMap(src, 'responsiveSpacingTablet'),
+    },
+    mobile: {
+      ...extractTokenMap(src, 'responsiveTypographyMobile'),
+      ...extractTokenMap(src, 'responsiveSizingMobile'),
+      ...extractTokenMap(src, 'responsiveSpacingMobile'),
+    },
+  };
+  return _responsiveCache;
+}
+
+/**
+ * Resolve a token for a specific breakpoint ('desktop' | 'tablet' | 'mobile').
+ * Falls back to desktop (base) value if no responsive override exists.
+ */
+export function resolveResponsiveToken(name, breakpoint = 'desktop', theme = 'light') {
+  if (breakpoint !== 'desktop') {
+    const overrides = loadResponsiveOverrides();
+    const bp = overrides[breakpoint];
+    if (bp && bp[name]) return bp[name];
+  }
+  return resolveToken(name, theme);
+}
+
+/**
+ * Get a typography style resolved for a specific breakpoint.
+ */
+export function getResponsiveTypographyStyle(styleName, breakpoint = 'desktop') {
+  if (breakpoint === 'desktop') return getTypographyStyle(styleName);
+
+  const desktopStyle = getTypographyStyle(styleName);
+  if (!desktopStyle) return null;
+
+  const overrides = loadResponsiveOverrides();
+  const bp = overrides[breakpoint] || {};
+  const prefix = `--typography/${styleName}/`;
+
+  const style = { ...desktopStyle };
+  for (const [key, value] of Object.entries(bp)) {
+    if (key.startsWith(prefix)) {
+      const prop = key.slice(prefix.length);
+      style[prop] = value;
+    }
+  }
+  return style;
+}
+
+/**
+ * Breakpoint-aware px() — resolves a token to a numeric pixel value at a given breakpoint.
+ */
+export function responsivePx(tokenNameOrValue, breakpoint = 'desktop') {
+  const val = resolveResponsiveToken(tokenNameOrValue, breakpoint) || tokenNameOrValue;
+  if (typeof val === 'number') return val;
+  const n = parseFloat(String(val));
+  return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Get the CDS breakpoint widths for Figma frame sizing.
+ */
+export function getBreakpointWidths() {
+  return {
+    desktop: 1440,
+    tablet: 768,
+    mobile: 390,
+  };
 }
 
 /**
@@ -319,10 +402,15 @@ export function searchTokens(query) {
  * Handles:
  * - COLOR variables from hex (#xxx) and rgba() values (preserves alpha as opacity)
  * - FLOAT variables from numeric px values
+ *
+ * When `responsive` is true, creates Desktop/Tablet/Mobile modes and
+ * sets override values from responsive token maps.
  */
-export function generateFigmaVariableCode(categoryName, collectionName) {
+export function generateFigmaVariableCode(categoryName, collectionName, { responsive = false } = {}) {
   const tokens = getCategory(categoryName);
   if (!tokens || Object.keys(tokens).length === 0) return null;
+
+  const overrides = responsive ? loadResponsiveOverrides() : null;
 
   const colorTokenKeys = Object.keys(tokens).filter(k =>
     k.includes('color') || k.includes('Color') ||
@@ -338,7 +426,21 @@ export function generateFigmaVariableCode(categoryName, collectionName) {
   lines.push(`  let col = collections.find(c => c.name === ${JSON.stringify(collectionName)});`);
   lines.push(`  if (!col) col = figma.variables.createVariableCollection(${JSON.stringify(collectionName)});`);
   lines.push(`  const colId = col.id;`);
-  lines.push(`  const modeId = col.modes[0].modeId;`);
+
+  if (responsive) {
+    lines.push(`  // Rename first mode to Desktop and add Tablet + Mobile modes`);
+    lines.push(`  const firstMode = col.modes[0];`);
+    lines.push(`  col.renameMode(firstMode.modeId, 'Desktop');`);
+    lines.push(`  let tabletMode = col.modes.find(m => m.name === 'Tablet');`);
+    lines.push(`  if (!tabletMode) { col.addMode('Tablet'); tabletMode = col.modes.find(m => m.name === 'Tablet'); }`);
+    lines.push(`  let mobileMode = col.modes.find(m => m.name === 'Mobile');`);
+    lines.push(`  if (!mobileMode) { col.addMode('Mobile'); mobileMode = col.modes.find(m => m.name === 'Mobile'); }`);
+    lines.push(`  const desktopModeId = firstMode.modeId;`);
+    lines.push(`  const tabletModeId = tabletMode.modeId;`);
+    lines.push(`  const mobileModeId = mobileMode.modeId;`);
+  } else {
+    lines.push(`  const desktopModeId = col.modes[0].modeId;`);
+  }
   lines.push(`  const existing = figma.variables.getLocalVariables().filter(v => v.variableCollectionId === colId);`);
   lines.push(`  const existingNames = new Set(existing.map(v => v.name));`);
   lines.push(`  let created = 0;`);
@@ -361,10 +463,10 @@ export function generateFigmaVariableCode(categoryName, collectionName) {
     lines.push(`    try {`);
     lines.push(`      const v = figma.variables.createVariable(${JSON.stringify(varName)}, colId, 'COLOR');`);
     if (String(val).startsWith('#')) {
-      lines.push(`      v.setValueForMode(modeId, hexToRgb(${JSON.stringify(val)}));`);
+      lines.push(`      v.setValueForMode(desktopModeId, hexToRgb(${JSON.stringify(val)}));`);
     } else if (String(val).startsWith('rgba')) {
       lines.push(`      const c = rgbaToFigma(${JSON.stringify(val)});`);
-      lines.push(`      if (c) v.setValueForMode(modeId, { r: c.r, g: c.g, b: c.b, ...(c.a < 1 ? { a: c.a } : {}) });`);
+      lines.push(`      if (c) v.setValueForMode(desktopModeId, { r: c.r, g: c.g, b: c.b, ...(c.a < 1 ? { a: c.a } : {}) });`);
     }
     lines.push(`      created++;`);
     lines.push(`    } catch(e) {}`);
@@ -376,16 +478,108 @@ export function generateFigmaVariableCode(categoryName, collectionName) {
     const varName = key.replace(/^--/, '');
     const num = parseFloat(String(val));
     if (isNaN(num)) continue;
-    lines.push(`  if (!existingNames.has(${JSON.stringify(varName)})) {`);
-    lines.push(`    try {`);
-    lines.push(`      const v = figma.variables.createVariable(${JSON.stringify(varName)}, colId, 'FLOAT');`);
-    lines.push(`      v.setValueForMode(modeId, ${num});`);
-    lines.push(`      created++;`);
-    lines.push(`    } catch(e) {}`);
+
+    lines.push(`  {`);
+    lines.push(`    let v = existing.find(x => x.name === ${JSON.stringify(varName)});`);
+    lines.push(`    if (!v) {`);
+    lines.push(`      try {`);
+    lines.push(`        v = figma.variables.createVariable(${JSON.stringify(varName)}, colId, 'FLOAT');`);
+    lines.push(`        v.setValueForMode(desktopModeId, ${num});`);
+    lines.push(`        created++;`);
+    lines.push(`      } catch(e) {}`);
+    lines.push(`    }`);
+
+    if (responsive && overrides) {
+      const tabletVal = overrides.tablet[key];
+      const mobileVal = overrides.mobile[key];
+      if (tabletVal) {
+        const tNum = parseFloat(String(tabletVal));
+        if (!isNaN(tNum)) {
+          lines.push(`    if (v) try { v.setValueForMode(tabletModeId, ${tNum}); } catch(e) {}`);
+        }
+      }
+      if (mobileVal) {
+        const mNum = parseFloat(String(mobileVal));
+        if (!isNaN(mNum)) {
+          lines.push(`    if (v) try { v.setValueForMode(mobileModeId, ${mNum}); } catch(e) {}`);
+        }
+      }
+    }
     lines.push(`  }`);
   }
 
   lines.push(`  return 'Created ' + created + ' variables in ' + ${JSON.stringify(collectionName)};`);
+  lines.push(`})()`);
+  return lines.join('\n');
+}
+
+/**
+ * Generate Figma code to push responsive typography as Text Styles
+ * with Desktop/Tablet/Mobile mode values in a variable collection.
+ */
+export function generateResponsiveTypographyPushCode() {
+  const { categories } = loadTokens();
+  const typo = categories.typography || {};
+  const overrides = loadResponsiveOverrides();
+
+  const typoKeys = Object.keys(typo).filter(k => k.endsWith('/font-size'));
+  if (typoKeys.length === 0) return null;
+
+  const lines = [`(async function() {`];
+  lines.push(`  const collections = figma.variables.getLocalVariableCollections();`);
+  lines.push(`  let col = collections.find(c => c.name === 'CDS Typography');`);
+  lines.push(`  if (!col) col = figma.variables.createVariableCollection('CDS Typography');`);
+  lines.push(`  const colId = col.id;`);
+  lines.push(`  col.renameMode(col.modes[0].modeId, 'Desktop');`);
+  lines.push(`  let tabletMode = col.modes.find(m => m.name === 'Tablet');`);
+  lines.push(`  if (!tabletMode) { col.addMode('Tablet'); tabletMode = col.modes.find(m => m.name === 'Tablet'); }`);
+  lines.push(`  let mobileMode = col.modes.find(m => m.name === 'Mobile');`);
+  lines.push(`  if (!mobileMode) { col.addMode('Mobile'); mobileMode = col.modes.find(m => m.name === 'Mobile'); }`);
+  lines.push(`  const desktopModeId = col.modes[0].modeId;`);
+  lines.push(`  const tabletModeId = tabletMode.modeId;`);
+  lines.push(`  const mobileModeId = mobileMode.modeId;`);
+  lines.push(`  const existing = figma.variables.getLocalVariables('FLOAT').filter(v => v.variableCollectionId === colId);`);
+  lines.push(`  let created = 0;`);
+
+  for (const fontSizeKey of typoKeys) {
+    const stylePath = fontSizeKey.replace('--typography/', '').replace('/font-size', '');
+    const props = ['font-size', 'line-height', 'letter-spacing'];
+
+    for (const prop of props) {
+      const tokenKey = `--typography/${stylePath}/${prop}`;
+      const desktopVal = typo[tokenKey];
+      if (!desktopVal) continue;
+
+      const varName = `typography/${stylePath}/${prop}`;
+      const dNum = parseFloat(String(desktopVal));
+      if (isNaN(dNum)) continue;
+
+      const tabletVal = overrides.tablet[tokenKey];
+      const mobileVal = overrides.mobile[tokenKey];
+
+      lines.push(`  {`);
+      lines.push(`    let v = existing.find(x => x.name === ${JSON.stringify(varName)});`);
+      lines.push(`    if (!v) { try { v = figma.variables.createVariable(${JSON.stringify(varName)}, colId, 'FLOAT'); created++; } catch(e) {} }`);
+      lines.push(`    if (v) {`);
+      lines.push(`      try { v.setValueForMode(desktopModeId, ${dNum}); } catch(e) {}`);
+      if (tabletVal) {
+        const tNum = parseFloat(String(tabletVal));
+        if (!isNaN(tNum)) {
+          lines.push(`      try { v.setValueForMode(tabletModeId, ${tNum}); } catch(e) {}`);
+        }
+      }
+      if (mobileVal) {
+        const mNum = parseFloat(String(mobileVal));
+        if (!isNaN(mNum)) {
+          lines.push(`      try { v.setValueForMode(mobileModeId, ${mNum}); } catch(e) {}`);
+        }
+      }
+      lines.push(`    }`);
+      lines.push(`  }`);
+    }
+  }
+
+  lines.push(`  return 'Created ' + created + ' responsive typography variables in CDS Typography';`);
   lines.push(`})()`);
   return lines.join('\n');
 }
@@ -437,12 +631,17 @@ export function generateFullVariablePushCode() {
   const steps = [];
 
   steps.push({ label: 'Pushing CDS color variables (primary, secondary, grey, semantic, state, opacity)', code: generateFigmaVariableCode('colors', 'CDS Colors') });
-  steps.push({ label: 'Pushing CDS spacing variables (4px base, 0–96px)', code: generateFigmaVariableCode('spacing', 'CDS Spacing') });
-  steps.push({ label: 'Pushing CDS sizing variables (button, input, chip, avatar, fab, table, dialog, rating, slider, badge, tab, menu, etc.)', code: generateFigmaVariableCode('sizing', 'CDS Sizing') });
+  steps.push({ label: 'Pushing CDS spacing variables (4px base, 0–96px) with Desktop/Tablet/Mobile modes', code: generateFigmaVariableCode('spacing', 'CDS Spacing', { responsive: true }) });
+  steps.push({ label: 'Pushing CDS sizing variables (button, input, chip, table, etc.) with Desktop/Tablet/Mobile modes', code: generateFigmaVariableCode('sizing', 'CDS Sizing', { responsive: true }) });
   steps.push({ label: 'Pushing CDS border radius variables (none–circular + component-specific)', code: generateFigmaVariableCode('borderRadius', 'CDS Border Radius') });
   steps.push({ label: 'Pushing CDS z-index variables (stepper–tooltip)', code: generateFigmaVariableCode('zIndex', 'CDS Z-Index') });
-  steps.push({ label: 'Pushing CDS component-specific variables (timeline, stepper, datepicker, table, nav, form, dialog, tooltip, snackbar, alert, slider, app-bar, bottom-nav, menu, file-upload, logo, pagination, rating)', code: generateFigmaVariableCode('components', 'CDS Components') });
+  steps.push({ label: 'Pushing CDS component-specific variables (timeline, stepper, datepicker, table, nav, etc.)', code: generateFigmaVariableCode('components', 'CDS Components') });
   steps.push({ label: 'Pushing CDS breakpoint variables', code: generateFigmaVariableCode('breakpoints', 'CDS Breakpoints') });
+
+  const typoCode = generateResponsiveTypographyPushCode();
+  if (typoCode) {
+    steps.push({ label: 'Pushing CDS responsive typography variables (Desktop/Tablet/Mobile modes)', code: typoCode });
+  }
 
   const darkCode = generateDarkModeCode('CDS Colors');
   if (darkCode) {
@@ -454,18 +653,24 @@ export function generateFullVariablePushCode() {
 
 export default {
   loadTokens,
+  loadResponsiveOverrides,
   resolveToken,
+  resolveResponsiveToken,
   getCategory,
   getTypographyStyle,
+  getResponsiveTypographyStyle,
   getComponentTokens,
   getColorGroup,
   px,
+  responsivePx,
   toHex,
   toFigmaColor,
   getOpacity,
   getTokenStats,
+  getBreakpointWidths,
   searchTokens,
   generateFigmaVariableCode,
   generateDarkModeCode,
+  generateResponsiveTypographyPushCode,
   generateFullVariablePushCode,
 };

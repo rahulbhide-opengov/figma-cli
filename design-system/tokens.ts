@@ -973,6 +973,201 @@ export const breakpointTokens: TokenMap = {
 };
 
 // ============================================================================
+// SECTION 11: RESPONSIVE OVERRIDES — Tablet & Mobile variants
+// Values that differ from desktop. If not listed here, use the desktop value.
+// Source: CDS Design System src/theme/tokens.ts responsive breakpoints
+//
+// Breakpoints: Desktop >= 900px | Tablet 600–899px | Mobile < 600px
+// Figma design sizes: Desktop 1440px | Tablet 768px | Mobile 390px
+// ============================================================================
+
+/**
+ * Responsive typography: tablet values that differ from desktop.
+ * Only tokens with actual differences are listed.
+ */
+export const responsiveTypographyTablet: TokenMap = {
+  // Display (tablet is LARGER than desktop for display styles)
+  '--typography/display/1/font-size': '72px',
+  '--typography/display/1/line-height': '88px',
+  '--typography/display/2/font-size': '64px',
+  '--typography/display/2/line-height': '76px',
+  '--typography/display/3/font-size': '56px',
+  '--typography/display/3/line-height': '68px',
+  '--typography/display/4/font-size': '48px',
+  '--typography/display/4/line-height': '56px',
+  '--typography/display/5/font-size': '40px',
+  '--typography/display/5/line-height': '48px',
+
+  // Headings that change on tablet
+  '--typography/heading/h5/font-size': '18px',
+  '--typography/heading/h6/font-size': '16px',
+  '--typography/heading/h6/line-height': '24px',
+
+  // Body text
+  '--typography/body/large/font-size': '16px',
+  '--typography/body/large/line-height': '24px',
+  '--typography/body/medium/font-size': '14px',
+  '--typography/body/medium/line-height': '20px',
+  '--typography/body/small/font-size': '14px',
+  '--typography/body/small/line-height': '20px',
+  '--typography/body/extra-small/font-size': '14px',
+  '--typography/body/extra-small/line-height': '20px',
+
+  // Button typography
+  '--typography/button/small/font-size': '14px',
+  '--typography/button/small/line-height': '20px',
+
+  // Chip typography
+  '--typography/chip/small/font-size': '14px',
+  '--typography/chip/small/line-height': '18px',
+
+  // Input typography
+  '--typography/input/label/large/font-size': '22px',
+  '--typography/input/label/large/line-height': '32px',
+  '--typography/input/value/medium/font-size': '18px',
+  '--typography/input/value/medium/line-height': '26px',
+  '--typography/input/value/large/font-size': '22px',
+  '--typography/input/value/large/line-height': '32px',
+};
+
+/**
+ * Responsive typography: mobile values that differ from desktop.
+ */
+export const responsiveTypographyMobile: TokenMap = {
+  // Display (mobile same as desktop for most display styles)
+  '--typography/display/1/font-size': '64px',
+  '--typography/display/1/line-height': '76px',
+
+  // Headings that change on mobile
+  '--typography/heading/h5/font-size': '18px',
+
+  // Body text (larger on mobile for readability)
+  '--typography/body/large/font-size': '16px',
+  '--typography/body/large/line-height': '24px',
+  '--typography/body/medium/font-size': '16px',
+  '--typography/body/medium/line-height': '24px',
+  '--typography/body/small/font-size': '14px',
+  '--typography/body/small/line-height': '20px',
+  '--typography/body/extra-small/font-size': '14px',
+  '--typography/body/extra-small/line-height': '20px',
+
+  // Button typography
+  '--typography/button/medium/line-height': '14px',
+  '--typography/button/small/font-size': '14px',
+  '--typography/button/small/line-height': '20px',
+
+  // Chip typography (larger on mobile)
+  '--typography/chip/small/font-size': '16px',
+  '--typography/chip/small/line-height': '20px',
+
+  // Avatar typography
+  '--typography/avatar/medium/font-size': '18px',
+  '--typography/avatar/medium/line-height': '24px',
+  '--typography/avatar/small/font-size': '16px',
+  '--typography/avatar/small/line-height': '24px',
+
+  // Input typography
+  '--typography/input/label/small/font-size': '10px',
+  '--typography/input/label/small/line-height': '14px',
+  '--typography/input/label/large/font-size': '24px',
+  '--typography/input/label/large/line-height': '32px',
+  '--typography/input/value/medium/font-size': '20px',
+  '--typography/input/value/medium/line-height': '28px',
+  '--typography/input/value/large/font-size': '26px',
+  '--typography/input/value/large/line-height': '36px',
+
+  // Menu item (smaller on mobile)
+  '--typography/menu-item/default/font-size': '18px',
+  '--typography/menu-item/default/line-height': '24px',
+
+  // Bottom nav
+  '--typography/bottom-nav/default/font-size': '16px',
+  '--typography/bottom-nav/default/line-height': '24px',
+};
+
+/**
+ * Responsive sizing: tablet values that differ from desktop.
+ */
+export const responsiveSizingTablet: TokenMap = {
+  // Button heights: desktop 28/32/40 → tablet 32/36/44
+  '--sizing/button/small': '32px',
+  '--sizing/button/medium': '36px',
+  '--sizing/button/large': '44px',
+
+  // Input heights: desktop 28/32/40 → tablet 32/36/44
+  '--sizing/input/small': '32px',
+  '--sizing/input/medium': '36px',
+  '--sizing/input/large': '44px',
+
+  // Chip sizes: desktop 28/32/40 → tablet 32/36/44
+  '--sizing/chip/small': '32px',
+  '--sizing/chip/medium': '36px',
+  '--sizing/chip/large': '44px',
+
+  // Chip in field: desktop 24/28/32 → tablet 28/32/36
+  '--sizing/chip-in-field/small': '28px',
+  '--sizing/chip-in-field/medium': '32px',
+  '--sizing/chip-in-field/large': '36px',
+
+  // Table: desktop 50 → tablet 56
+  '--sizing/table/header': '56px',
+  '--sizing/table/cell': '56px',
+};
+
+/**
+ * Responsive sizing: mobile values that differ from desktop.
+ */
+export const responsiveSizingMobile: TokenMap = {
+  // Button heights: desktop 28/32/40 → mobile 32/36/44
+  '--sizing/button/small': '32px',
+  '--sizing/button/medium': '36px',
+  '--sizing/button/large': '44px',
+
+  // Input heights: desktop 28/32/40 → mobile 32/40/48
+  '--sizing/input/small': '32px',
+  '--sizing/input/medium': '40px',
+  '--sizing/input/large': '48px',
+
+  // Chip sizes: desktop 28/32/40 → mobile 32/36/44
+  '--sizing/chip/small': '32px',
+  '--sizing/chip/medium': '36px',
+  '--sizing/chip/large': '44px',
+
+  // Chip in field: desktop 24/28/32 → mobile 28/32/36
+  '--sizing/chip-in-field/small': '28px',
+  '--sizing/chip-in-field/medium': '32px',
+  '--sizing/chip-in-field/large': '36px',
+
+  // Table: desktop 50 → mobile 64
+  '--sizing/table/header': '64px',
+  '--sizing/table/cell': '64px',
+
+  // App bar: desktop 64 → mobile 56
+  '--sizing/app-bar/height': '56px',
+};
+
+/**
+ * Responsive spacing: large values that scale down on smaller screens.
+ */
+export const responsiveSpacingTablet: TokenMap = {
+  '--spacing/16': '56px',   // 64 → 56
+  '--spacing/18': '64px',   // 72 → 64
+  '--spacing/20': '72px',   // 80 → 72
+  '--spacing/22': '80px',   // 88 → 80
+  '--spacing/24': '88px',   // 96 → 88
+};
+
+export const responsiveSpacingMobile: TokenMap = {
+  '--spacing/10': '36px',   // 40 → 36
+  '--spacing/12': '40px',   // 48 → 40
+  '--spacing/16': '44px',   // 64 → 44
+  '--spacing/18': '48px',   // 72 → 48
+  '--spacing/20': '52px',   // 80 → 52
+  '--spacing/22': '56px',   // 88 → 56
+  '--spacing/24': '60px',   // 96 → 60
+};
+
+// ============================================================================
 // BACKWARD COMPATIBILITY ALIASES
 // ============================================================================
 
@@ -1021,4 +1216,21 @@ export const allTokens: TokenMap = {
   ...componentTokens,
   ...transitionTokens,
   ...breakpointTokens,
+};
+
+/**
+ * Responsive override maps — merged on top of allTokens for tablet/mobile.
+ * Usage: { ...allTokens, ...responsiveOverrides.tablet } gives tablet values.
+ */
+export const responsiveOverrides = {
+  tablet: {
+    ...responsiveTypographyTablet,
+    ...responsiveSizingTablet,
+    ...responsiveSpacingTablet,
+  },
+  mobile: {
+    ...responsiveTypographyMobile,
+    ...responsiveSizingMobile,
+    ...responsiveSpacingMobile,
+  },
 };

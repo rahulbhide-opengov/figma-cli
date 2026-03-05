@@ -209,6 +209,30 @@ Below is the complete mapping. User says the LEFT side. You silently run the RIG
 | "Create a mobile dashboard" / "Dashboard for mobile" | `node src/index.js ds page dashboard --mobile` |
 | "Create a mobile form" | `node src/index.js ds page form --mobile` |
 
+### Responsive Design (Desktop / Tablet / Mobile)
+
+CDS tokens are **fully responsive** — typography, sizing, and spacing values change across breakpoints:
+- **Desktop** (1440px): Default values — h5=16px, button/small=28px, body=14px
+- **Tablet** (768px): Adjusted for touch — h5=18px, button/small=32px, body=16px
+- **Mobile** (390px): Optimized for small screens — button/small=32px, input/medium=40px, table/cell=64px
+
+The `ds setup` command pushes Figma variables with **3 modes** (Desktop/Tablet/Mobile) for sizing, spacing, and typography collections. Switching the Figma variable mode on a frame will update all bound values automatically.
+
+| User says | You run |
+|-----------|---------|
+| "Create a button for tablet" / "Tablet button" | `node src/index.js ds create button -b tablet` |
+| "Create a button for mobile" | `node src/index.js ds create button -b mobile` |
+| "Show button at all breakpoints" / "Responsive button" | `node src/index.js ds create button --responsive` |
+| "Create a tablet form page" | `node src/index.js ds page form -b tablet` |
+| "Create dashboard at all breakpoints" | `node src/index.js ds page dashboard --responsive` |
+| "Mobile landing page" | `node src/index.js ds page landing -b mobile` |
+| "Show me all 3 sizes" / "Desktop tablet mobile" | `node src/index.js ds page dashboard --responsive` |
+
+**What changes per breakpoint:**
+- **Typography**: Display sizes (desktop 60px → tablet 72px), body text (desktop 14px → mobile 16px), input labels, chip text, avatar initials, menu items, bottom nav labels
+- **Sizing**: Buttons (28/32/40 → 32/36/44), inputs (28/32/40 → 32/40/48), chips, table rows (50 → 64), chip-in-field, app bar height
+- **Spacing**: Large spacing values scale down (64px desktop → 44px mobile, 96px → 60px)
+
 ### Connection & Figma Files
 
 | User says | You run |
@@ -245,17 +269,18 @@ No patching or Full Disk Access is required for the pipe method to work. The CLI
 | "Show spacing scale" | `node src/index.js ds tokens list -c spacing` |
 | "Show typography tokens" | `node src/index.js ds tokens list -c typography` |
 
-**IMPORTANT:** `ds setup` is the one-command way to push ALL CDS tokens (550+ tokens) to a Figma file. It creates:
+**IMPORTANT:** `ds setup` is the one-command way to push ALL CDS tokens (616+ tokens) to a Figma file. It creates:
 - **CDS Colors** collection — Blurple primary scale (50-900), Slate secondary scale (50-900), grey scale (50-900 + A-values), semantic colors (error, warning, success, info with light/dark/alternate), text/background/action/divider colors, primary/secondary state colors (hover/selected/focus/focusVisible/outlinedBorder), backdrop/overlay colors, ALL opacity variants (primary/secondary/error/success/warning/info at 4-100%), alert severity backgrounds, read-only/disabled states, component-specific colors (breadcrumb, chip, timeline, stepper, datepicker, nav, table) + **dark mode** (text, background, action, state colors)
-- **CDS Spacing** collection — 4px base unit scale (0–96px, 23 values)
-- **CDS Sizing** collection — button, input, chip, chipInField, avatar (xs–xl), fab, table, icon, app-bar, bottom-nav, drawer, dialog (xs–xl), pagination, rating, slider, badge, tab, menu-item, list-item, speed-dial, container (xs–xl) + touch target minimum
+- **CDS Spacing** collection — 4px base unit scale (0–96px, 23 values) with **Desktop/Tablet/Mobile modes** (large values scale down: 64→56→44, 80→72→52, etc.)
+- **CDS Sizing** collection — button, input, chip, chipInField, avatar, fab, table, icon, app-bar, drawer, dialog, pagination, rating, slider, badge, tab, menu-item, list-item + touch target minimum — with **Desktop/Tablet/Mobile modes** (button 28/32/40 → tablet 32/36/44 → mobile 32/36/44; input 28/32/40 → 32/36/44 → 32/40/48; table 50→56→64)
+- **CDS Typography** collection — 50+ font-size/line-height/letter-spacing variables with **Desktop/Tablet/Mobile modes** (h5 16→18→18, body 14→16→16, display1 60→72→64, input values scale up on mobile, chip text 12→14→16)
 - **CDS Border Radius** collection — none/extraSmall/small/medium/large/circular/full + component-specific (button, input, card, chip, dialog, tooltip, alert, paper, fab, skeleton, avatar)
 - **CDS Z-Index** collection — mobileStepper through tooltip stacking order
 - **CDS Components** collection — measurements for timeline, stepper, datepicker, table, nav, breadcrumb, chip, form, dialog, tooltip, snackbar, alert, slider, app-bar, bottom-nav, menu, file-upload, transfer-list, logo, wand, pagination, rating
 - **CDS Breakpoints** collection — responsive breakpoints (xs–xl + Figma design sizes)
 - **CDS Text Styles** — 50+ DM Sans typography styles: display (1–5), heading (h1–h6), body (large/medium/small/extra-small), subtitle (1–2), button (s/m/l), chip (s/m/l), avatar (s/m/l), table (header/cell/footer), alert (title/description), dialog (title/content), badge, tooltip, stepper, slider, rating, menu-item (default/dense), bottom-nav (actions/default), helper-text, caption, overline
 
-After setup, all designs created with `ds create` are automatically bound to these variables.
+After setup, all designs created with `ds create` are automatically bound to these variables. Switch between Desktop/Tablet/Mobile modes in Figma's variable panel to see values adapt responsively.
 
 ### Token Lookups
 

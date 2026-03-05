@@ -4514,6 +4514,8 @@ ds
   .option('--width <n>', 'Width override')
   .option('--disabled', 'Disabled state')
   .option('--open', 'Open/expanded state')
+  .option('-b, --breakpoint <bp>', 'Breakpoint: desktop (1440), tablet (768), mobile (390)')
+  .option('--responsive', 'Create all 3 breakpoints side by side')
   .option('--json', 'Output raw JSX instead of rendering')
   .action(async (componentName, options) => {
     const comp = componentRegistry.getComponent(componentName);
@@ -4537,9 +4539,40 @@ ds
     if (options.width) renderOpts.width = parseInt(options.width);
     if (options.disabled) renderOpts.disabled = true;
     if (options.open) renderOpts.open = true;
+    if (options.breakpoint) renderOpts.breakpoint = options.breakpoint;
 
     try {
+      // --responsive: render all 3 breakpoints side by side
+      if (options.responsive) {
+        await checkConnection();
+        const breakpoints = ['desktop', 'tablet', 'mobile'];
+        const spinner = ora(`Creating ${comp.name} at 3 breakpoints...`).start();
+        const jsxList = [];
+        for (const bp of breakpoints) {
+          componentRegistry.setBreakpoint(bp);
+          jsxList.push(comp.render({ ...renderOpts, breakpoint: bp }));
+        }
+        componentRegistry.setBreakpoint('desktop');
+
+        const batchJson = JSON.stringify(jsxList);
+        const cmd = `npx figma-use render-batch --stdin --json`;
+        let posX = getNextFreeX();
+        const output = execSync(cmd, {
+          input: batchJson,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 60000
+        });
+
+        spinner.succeed(`${comp.name} created at Desktop, Tablet, Mobile`);
+        console.log(chalk.gray('  3 responsive variants placed side by side'));
+        return;
+      }
+
+      // Single breakpoint render
+      if (options.breakpoint) componentRegistry.setBreakpoint(options.breakpoint);
       const jsx = comp.render(renderOpts);
+      if (options.breakpoint) componentRegistry.setBreakpoint('desktop');
 
       if (options.json) {
         console.log(jsx);
@@ -4547,7 +4580,8 @@ ds
       }
 
       await checkConnection();
-      const spinner = ora(`Creating ${comp.name}...`).start();
+      const bpLabel = options.breakpoint ? ` (${options.breakpoint})` : '';
+      const spinner = ora(`Creating ${comp.name}${bpLabel}...`).start();
 
       let posX = getNextFreeX();
       const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
@@ -4559,10 +4593,9 @@ ds
       });
 
       const result = JSON.parse(output.trim());
-      spinner.succeed(`${comp.name} created: ${result.id}`);
+      spinner.succeed(`${comp.name}${bpLabel} created: ${result.id}`);
       if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
 
-      // Post-creation: bind to variables and text styles
       const frameName = result.name || comp.name;
       const bindSpinner = ora('  Binding to design system variables...').start();
       try {
@@ -4867,15 +4900,21 @@ dsTokens
 ds
   .command('page <type>')
   .description('Generate a full page layout (e.g. "dashboard", "form", "landing", "settings")')
-  .option('-w, --width <n>', 'Page width', '1440')
+  .option('-w, --width <n>', 'Page width (auto-set from breakpoint if not specified)')
   .option('--name <name>', 'Frame name')
-  .option('--mobile', 'Generate mobile version (375px)')
+  .option('-b, --breakpoint <bp>', 'Breakpoint: desktop (1440), tablet (768), mobile (390)')
+  .option('--responsive', 'Generate all 3 breakpoints (desktop + tablet + mobile)')
+  .option('--mobile', 'Shortcut for --breakpoint mobile')
   .action(async (pageType, options) => {
     await checkConnection();
 
-    const width = options.mobile ? 375 : parseInt(options.width);
+    const bp = options.mobile ? 'mobile' : (options.breakpoint || 'desktop');
+    const bpWidths = { desktop: 1440, tablet: 768, mobile: 390 };
+    const width = options.width ? parseInt(options.width) : bpWidths[bp];
     const pageName = options.name || `${pageType} Page`;
-    const variant = options.mobile ? 'mobile' : 'desktop';
+    const variant = bp;
+
+    if (bp !== 'desktop') componentRegistry.setBreakpoint(bp);
 
     const pageConfigs = {
       dashboard: {
@@ -4937,10 +4976,37 @@ ds
       return;
     }
 
-    const spinner = ora(`Building ${pageType} page...`).start();
+    // --responsive: render at all 3 breakpoints
+    if (options.responsive) {
+      const spinner = ora(`Building ${pageType} page at 3 breakpoints...`).start();
+      const breakpoints = ['desktop', 'tablet', 'mobile'];
+      const jsxList = [];
+      for (const bpName of breakpoints) {
+        componentRegistry.setBreakpoint(bpName);
+        const bpConfig = { ...config, name: `${pageName} — ${bpName.charAt(0).toUpperCase() + bpName.slice(1)}`, width: bpWidths[bpName] };
+        jsxList.push(componentRegistry.buildPage(bpConfig));
+      }
+      componentRegistry.setBreakpoint('desktop');
+
+      try {
+        const batchJson = JSON.stringify(jsxList);
+        const posX = getNextFreeX();
+        const cmd = `npx figma-use render-batch --stdin --json`;
+        const output = execSync(cmd, { input: batchJson, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 90000 });
+        spinner.succeed(`${pageType} page created at Desktop (1440), Tablet (768), Mobile (390)`);
+        return;
+      } catch (e) {
+        spinner.fail(`Page creation failed: ${e.stderr || e.message}`);
+        return;
+      }
+    }
+
+    const bpLabel = bp !== 'desktop' ? ` (${bp} — ${width}px)` : '';
+    const spinner = ora(`Building ${pageType} page${bpLabel}...`).start();
 
     try {
       const jsx = componentRegistry.buildPage(config);
+      if (bp !== 'desktop') componentRegistry.setBreakpoint('desktop');
       const posX = getNextFreeX();
       const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
       const output = execSync(cmd, {
@@ -4950,7 +5016,7 @@ ds
         timeout: 60000
       });
       const result = JSON.parse(output.trim());
-      spinner.succeed(`${pageType} page created: ${result.id}`);
+      spinner.succeed(`${pageType} page${bpLabel} created: ${result.id}`);
       if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
     } catch (e) {
       spinner.fail(`Page creation failed: ${e.stderr || e.message}`);

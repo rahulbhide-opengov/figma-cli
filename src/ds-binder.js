@@ -56,8 +56,8 @@ export function buildTypographyMap() {
     'heading/h1', 'heading/h2', 'heading/h3', 'heading/h4', 'heading/h5', 'heading/h6',
     // Display
     'display/1', 'display/2', 'display/3', 'display/4', 'display/5',
-    // Body
-    'body/large', 'body/medium', 'body/small',
+    // Body (including body3/body4 as extra-small)
+    'body/large', 'body/medium', 'body/small', 'body/extra-small',
     // Subtitles
     'subtitle/1', 'subtitle/2',
     // Input
@@ -80,6 +80,8 @@ export function buildTypographyMap() {
     'dialog/title', 'dialog/content',
     // Badge, Tooltip, Stepper, Slider
     'badge', 'tooltip', 'stepper/label', 'slider/value-label',
+    // Rating
+    'rating/icon',
     // Menu Item
     'menu-item/default', 'menu-item/dense',
     // Bottom Nav

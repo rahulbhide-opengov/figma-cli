@@ -175,6 +175,28 @@ Below is the complete mapping. User says the LEFT side. You silently run the RIG
 | "Create a button group" | `node src/index.js ds create buttongroup` |
 | "Create an icon button" | `node src/index.js ds create iconbutton` |
 | "Create a date picker" / "Calendar" | `node src/index.js ds create datepicker` |
+| "Create a FAB" / "Floating action button" | `node src/index.js ds create fab` |
+| "Create a divider" / "Separator line" | `node src/index.js ds create divider` |
+| "Create a paper" / "Surface container" | `node src/index.js ds create paper` |
+| "Create a rating" / "Star rating" | `node src/index.js ds create rating` |
+| "Create a slider" / "Range input" | `node src/index.js ds create slider` |
+| "Create an autocomplete" / "Search dropdown" | `node src/index.js ds create autocomplete` |
+| "Create a file upload" / "Drop zone" | `node src/index.js ds create fileupload` |
+| "Create a drawer" / "Side panel" | `node src/index.js ds create drawer` |
+| "Create bottom navigation" / "Mobile tabs" | `node src/index.js ds create bottomnavigation` |
+| "Create a menu" / "Context menu" / "Dropdown menu" | `node src/index.js ds create menu` |
+| "Create pagination" / "Page controls" | `node src/index.js ds create pagination` |
+| "Create avatar group" / "Stacked avatars" | `node src/index.js ds create avatargroup` |
+| "Create an image grid" / "Photo gallery" | `node src/index.js ds create imagelist` |
+| "Create a progress bar" / "Linear progress" | `node src/index.js ds create linearprogress` |
+| "Create a spinner" / "Circular progress" | `node src/index.js ds create circularprogress` |
+| "Create a backdrop" / "Overlay" | `node src/index.js ds create backdrop` |
+| "Show typography" / "Type scale" | `node src/index.js ds create typography` |
+| "Add the logo" / "OpenGov logo" | `node src/index.js ds create logo` |
+| "Create a login page" / "Sign in form" | `node src/index.js ds create loginform` |
+| "Create a dashboard" / "Dashboard layout" | `node src/index.js ds create dashboard` |
+| "Create a profile card" / "User card" | `node src/index.js ds create profilecard` |
+| "Create a contact form" / "Feedback form" | `node src/index.js ds create contactform` |
 
 ### Creating Full Pages
 
@@ -223,13 +245,15 @@ No patching or Full Disk Access is required for the pipe method to work. The CLI
 | "Show spacing scale" | `node src/index.js ds tokens list -c spacing` |
 | "Show typography tokens" | `node src/index.js ds tokens list -c typography` |
 
-**IMPORTANT:** `ds setup` is the one-command way to push ALL CDS tokens (464 tokens) to a Figma file. It creates:
-- **CDS Colors** collection — Blurple primary scale (50-900), Slate secondary scale (50-900), grey scale, semantic colors (error, warning, success, info), state colors, backdrop/overlays + dark mode
-- **CDS Spacing** collection — 4px base unit scale (0-96px)
-- **CDS Sizing** collection — button, input, chip, avatar, icon, table sizes
-- **CDS Border Radius** collection — none/extraSmall/small/medium/large + component-specific
-- **CDS Components** collection — component-specific measurements
-- **CDS Text Styles** — all DM Sans typography styles (heading, body, button, chip, table, etc.)
+**IMPORTANT:** `ds setup` is the one-command way to push ALL CDS tokens (550+ tokens) to a Figma file. It creates:
+- **CDS Colors** collection — Blurple primary scale (50-900), Slate secondary scale (50-900), grey scale (50-900 + A-values), semantic colors (error, warning, success, info with light/dark/alternate), text/background/action/divider colors, primary/secondary state colors (hover/selected/focus/focusVisible/outlinedBorder), backdrop/overlay colors, ALL opacity variants (primary/secondary/error/success/warning/info at 4-100%), alert severity backgrounds, read-only/disabled states, component-specific colors (breadcrumb, chip, timeline, stepper, datepicker, nav, table) + **dark mode** (text, background, action, state colors)
+- **CDS Spacing** collection — 4px base unit scale (0–96px, 23 values)
+- **CDS Sizing** collection — button, input, chip, chipInField, avatar (xs–xl), fab, table, icon, app-bar, bottom-nav, drawer, dialog (xs–xl), pagination, rating, slider, badge, tab, menu-item, list-item, speed-dial, container (xs–xl) + touch target minimum
+- **CDS Border Radius** collection — none/extraSmall/small/medium/large/circular/full + component-specific (button, input, card, chip, dialog, tooltip, alert, paper, fab, skeleton, avatar)
+- **CDS Z-Index** collection — mobileStepper through tooltip stacking order
+- **CDS Components** collection — measurements for timeline, stepper, datepicker, table, nav, breadcrumb, chip, form, dialog, tooltip, snackbar, alert, slider, app-bar, bottom-nav, menu, file-upload, transfer-list, logo, wand, pagination, rating
+- **CDS Breakpoints** collection — responsive breakpoints (xs–xl + Figma design sizes)
+- **CDS Text Styles** — 50+ DM Sans typography styles: display (1–5), heading (h1–h6), body (large/medium/small/extra-small), subtitle (1–2), button (s/m/l), chip (s/m/l), avatar (s/m/l), table (header/cell/footer), alert (title/description), dialog (title/content), badge, tooltip, stepper, slider, rating, menu-item (default/dense), bottom-nav (actions/default), helper-text, caption, overline
 
 After setup, all designs created with `ds create` are automatically bound to these variables.
 

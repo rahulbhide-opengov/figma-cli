@@ -1,17 +1,26 @@
 /**
- * Component Registry — CDS Design System
+ * Component Registry — CDS Design System v3.1
  *
- * Maps CDS components to Figma JSX blueprints.
+ * Maps ALL CDS visual components to Figma JSX blueprints.
  * All token values sourced from ds-engine.js which reads the CDS token spec.
  *
  * Source of truth: https://github.com/rahulbhide-opengov/CDS-Design-System
  *
- * Components: Button, IconButton, ButtonGroup, TextField, Select,
- * Checkbox, Radio, Switch, ToggleButton, Chip, Avatar,
- * Card, Dialog, Tooltip, Snackbar, Alert, Skeleton,
- * List, Navigation, Breadcrumb, Stepper, Timeline,
- * DataTable, DatePicker, PageHeading, SectionHeading,
- * FormLayout, Accordion, Tabs, AppBar, Badge, Progress
+ * 50 visual components in 10 categories:
+ *
+ * BUTTONS:     Button, IconButton, ButtonGroup, FAB, ToggleButton
+ * FORMS:       TextField, Select, Checkbox, Radio, Switch, Rating, Slider,
+ *              Autocomplete, FileUpload
+ * LAYOUT:      Card, Paper, Divider, Accordion
+ * NAVIGATION:  Navigation, AppBar, Tabs, Breadcrumb, Stepper,
+ *              BottomNavigation, Drawer, Menu, Pagination
+ * DATA:        DataTable, List, Avatar, AvatarGroup, Chip, Badge, Timeline,
+ *              Typography, ImageList
+ * FEEDBACK:    Alert, Dialog, Tooltip, Snackbar, Skeleton, Progress,
+ *              Backdrop, LinearProgress, CircularProgress
+ * BRANDING:    Logo, OpenGovWand
+ * PAGE:        PageHeading, SectionHeading, FormLayout
+ * PATTERNS:    LoginForm, Dashboard, ProfileCard, ContactForm
  */
 
 import dsEngine from './ds-engine.js';
@@ -1112,6 +1121,609 @@ components.accordion = {
 
     return `<Frame name="Accordion" w={${width}} flex="col" bg="${c.bgPaper}" rounded={${radius('card')}} overflow="hidden">
 ${sections}
+</Frame>`;
+  }
+};
+
+
+// ---------------------------------------------------------------------------
+// FAB — CDS: Floating Action Button, sizes 32/40/50
+// ---------------------------------------------------------------------------
+components.fab = {
+  name: 'FAB',
+  description: 'CDS floating action button',
+  sizes: ['small', 'medium', 'large'],
+
+  render({ size = 'medium', color = 'primary', icon = '+' } = {}) {
+    const c = colors();
+    const dim = p(`--sizing/fab/${size}`);
+    const bg = color === 'primary' ? c.primary : color === 'secondary' ? c.secondary : c.grey300;
+    const textColor = color === 'primary' || color === 'secondary' ? '#ffffff' : c.textPrimary;
+    const fontSize = size === 'large' ? 28 : size === 'small' ? 18 : 22;
+
+    return `<Frame name="FAB/${size}" w={${dim}} h={${dim}} bg="${bg}" rounded={${dim}} flex="row" items="center" justify="center" shadow="0 3 5 #0000001a">
+  <Text size={${fontSize}} weight="500" color="${textColor}">${icon}</Text>
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// DIVIDER — CDS: horizontal/vertical
+// ---------------------------------------------------------------------------
+components.divider = {
+  name: 'Divider',
+  description: 'CDS visual separator',
+  variants: ['horizontal', 'vertical'],
+
+  render({ orientation = 'horizontal', width = 400, height = 200 } = {}) {
+    const c = colors();
+    if (orientation === 'vertical') {
+      return `<Frame name="Divider/vertical" w={1} h={${height}} bg="${c.divider}" />`;
+    }
+    return `<Frame name="Divider/horizontal" w={${width}} h={1} bg="${c.divider}" />`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PAPER — CDS: elevation surface, radius 4px
+// ---------------------------------------------------------------------------
+components.paper = {
+  name: 'Paper',
+  description: 'CDS elevated surface container',
+  variants: ['elevation', 'outlined'],
+
+  render({ variant = 'elevation', elevation = 'low', width = 320, height = 200, content = '' } = {}) {
+    const c = colors();
+    const r = radius('paper');
+    const elevMap = { none: 0, low: 2, medium: 4, high: 8 };
+    const elev = elevMap[elevation] || 2;
+    const shadow = elev === 0 ? '' : ` shadow="0 ${elev} ${elev * 2} #0000001a"`;
+    const strokeAttr = variant === 'outlined' ? ` stroke="${c.border}" strokeWidth={1}` : '';
+
+    return `<Frame name="Paper/${variant}" w={${width}} h={${height}} bg="${c.bgPaper}" rounded={${r}}${strokeAttr}${shadow} p={${spacing(4)}}>
+  ${content ? `<Text size={14} color="${c.textPrimary}" w="fill">${content}</Text>` : ''}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// RATING — CDS: star rating, sizes 20/24/32
+// ---------------------------------------------------------------------------
+components.rating = {
+  name: 'Rating',
+  description: 'CDS star rating input',
+  sizes: ['small', 'medium', 'large'],
+
+  render({ value = 3, max = 5, size = 'medium', readOnly = false } = {}) {
+    const c = colors();
+    const starSize = p(`--sizing/rating/${size}`);
+    const filledColor = '#faaf00';
+    const emptyColor = c.grey300;
+
+    const stars = Array.from({ length: max }, (_, i) => {
+      const filled = i < value;
+      return `  <Text size={${starSize}} color="${filled ? filledColor : emptyColor}">★</Text>`;
+    }).join('\n');
+
+    return `<Frame name="Rating/${size}" flex="row" gap={4} items="center">
+${stars}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// SLIDER — CDS: track 4px, thumb 20px
+// ---------------------------------------------------------------------------
+components.slider = {
+  name: 'Slider',
+  description: 'CDS range slider input',
+
+  render({ value = 40, min = 0, max = 100, showLabel = false, width = 240 } = {}) {
+    const c = colors();
+    const trackH = 4;
+    const thumbSize = 20;
+    const percent = ((value - min) / (max - min)) * 100;
+    const filledW = Math.round(width * percent / 100);
+
+    const labelJsx = showLabel
+      ? `\n  <Frame w={28} h={24} bg="${c.primary}" rounded={4} flex="row" items="center" justify="center" x={${filledW - 14}} y={-30}>
+    <Text size={12} weight="500" color="#ffffff">${value}</Text>
+  </Frame>`
+      : '';
+
+    return `<Frame name="Slider" w={${width}} flex="col" gap={8}>
+  ${labelJsx}
+  <Frame w="fill" h={${trackH}} bg="${c.grey300}" rounded={2}>
+    <Frame w={${filledW}} h={${trackH}} bg="${c.primary}" rounded={2} />
+  </Frame>
+  <Frame w={${thumbSize}} h={${thumbSize}} bg="${c.primary}" rounded={${thumbSize}} shadow="0 1 3 #0000004d" x={${filledW - thumbSize / 2}} y={-8} />
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// AUTOCOMPLETE — CDS: input + dropdown with search
+// ---------------------------------------------------------------------------
+components.autocomplete = {
+  name: 'Autocomplete',
+  description: 'CDS searchable select dropdown',
+
+  render({ label = 'Country', placeholder = 'Search...', options = ['United States', 'Canada', 'United Kingdom', 'Australia'], open = true } = {}) {
+    const c = colors();
+    const r = radius('input');
+
+    const dropdownJsx = open
+      ? `\n  <Frame name="Dropdown" w="fill" flex="col" bg="${c.bgPaper}" rounded={${r}} stroke="${c.border}" strokeWidth={1} shadow="0 4 12 #0000001a">
+${options.map(opt => `    <Frame w="fill" h={40} flex="row" items="center" px={12}>
+      <Text size={14} color="${c.textPrimary}">${opt}</Text>
+    </Frame>`).join('\n')}
+  </Frame>`
+      : '';
+
+    return `<Frame name="Autocomplete" w={280} flex="col" gap={4}>
+  <Text size={14} weight="400" color="${c.textSecondary}">${label}</Text>
+  <Frame w="fill" h={32} flex="row" items="center" px={12} bg="${c.bgPaper}" stroke="${c.border}" strokeWidth={1} rounded={${r}} gap={8}>
+    <Text size={14} color="${c.textDisabled}" w="fill">${placeholder}</Text>
+    <Text size={12} color="${c.textSecondary}">▼</Text>
+  </Frame>${dropdownJsx}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// FILE UPLOAD — CDS: dashed border dropzone
+// ---------------------------------------------------------------------------
+components.fileupload = {
+  name: 'File Upload',
+  description: 'CDS drag-and-drop file upload zone',
+
+  render({ text = 'Drag & drop files here, or click to browse', maxSize = '10 MB', multiple = true } = {}) {
+    const c = colors();
+    const r = radius('card');
+
+    return `<Frame name="FileUpload" w={400} h={180} flex="col" items="center" justify="center" gap={12} p={32} bg="${c.bgPaper}" rounded={${r}} stroke="${c.primary}" strokeWidth={2}>
+  <Frame w={48} h={48} bg="${c.primary200}" rounded={24} flex="row" items="center" justify="center">
+    <Text size={24} color="${c.primary}">↑</Text>
+  </Frame>
+  <Text size={14} color="${c.textSecondary}" w="fill">${text}</Text>
+  <Text size={12} color="${c.textDisabled}">Max file size: ${maxSize}${multiple ? ' • Multiple files allowed' : ''}</Text>
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// DRAWER — CDS: side panel, width 240/320
+// ---------------------------------------------------------------------------
+components.drawer = {
+  name: 'Drawer',
+  description: 'CDS side drawer panel',
+
+  render({ variant = 'permanent', anchor = 'left', items = ['Dashboard', 'Users', 'Settings'], activeIndex = 0, title = 'App Name' } = {}) {
+    const c = colors();
+    const w = 240;
+
+    const navItems = items.map((item, i) => {
+      const isActive = i === activeIndex;
+      const bg = isActive ? 'rgba(75,63,255,0.08)' : 'transparent';
+      return `  <Frame w="fill" h={48} flex="row" items="center" px={16} gap={16}${isActive ? ` bg="${bg}"` : ''} rounded={8}>
+    <Frame w={24} h={24} bg="${isActive ? c.primary : c.textTertiary}" rounded={4} opacity={0.4} />
+    <Text size={14} weight="${isActive ? '600' : '400'}" color="${isActive ? c.primary : c.textPrimary}">${item}</Text>
+  </Frame>`;
+    }).join('\n');
+
+    return `<Frame name="Drawer/${variant}" w={${w}} h={600} flex="col" bg="${c.bgPaper}" stroke="${c.border}" strokeWidth={1} py={8} gap={2}>
+  <Frame w="fill" h={64} flex="row" items="center" px={16} gap={12}>
+    <Frame w={32} h={32} bg="${c.primary}" rounded={8} />
+    <Text size={16} weight="600" color="${c.textPrimary}">${title}</Text>
+  </Frame>
+  <Frame w="fill" h={1} bg="${c.divider}" />
+${navItems}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// BOTTOM NAVIGATION — CDS: height 56px
+// ---------------------------------------------------------------------------
+components.bottomnavigation = {
+  name: 'Bottom Navigation',
+  description: 'CDS mobile bottom tab bar',
+
+  render({ items = ['Home', 'Search', 'Favorites', 'Profile'], activeIndex = 0 } = {}) {
+    const c = colors();
+
+    const navItems = items.map((item, i) => {
+      const isActive = i === activeIndex;
+      const textColor = isActive ? c.primary : c.textTertiary;
+      return `  <Frame flex="col" items="center" gap={4} grow={1}>
+    <Frame w={24} h={24} bg="${textColor}" rounded={4} opacity={${isActive ? '1' : '0.5'}} />
+    <Text size={12} weight="500" color="${textColor}">${item}</Text>
+  </Frame>`;
+    }).join('\n');
+
+    return `<Frame name="BottomNavigation" w={390} h={56} flex="row" items="center" px={8} bg="${c.bgPaper}" shadow="0 -1 3 #0000001a">
+${navItems}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// MENU — CDS: dropdown menu, item height 48px
+// ---------------------------------------------------------------------------
+components.menu = {
+  name: 'Menu',
+  description: 'CDS dropdown/context menu',
+
+  render({ items = ['Edit', 'Duplicate', 'Delete'], selectedIndex = -1 } = {}) {
+    const c = colors();
+    const r = radius('card');
+
+    const menuItems = items.map((item, i) => {
+      const isSelected = i === selectedIndex;
+      const bg = isSelected ? 'rgba(75,63,255,0.08)' : 'transparent';
+      const isDanger = item.toLowerCase() === 'delete' || item.toLowerCase() === 'remove';
+      const textColor = isDanger ? c.error : c.textPrimary;
+      return `  <Frame w="fill" h={48} flex="row" items="center" px={16} gap={12} bg="${bg}">
+    <Text size={14} color="${textColor}">${item}</Text>
+  </Frame>`;
+    }).join('\n');
+
+    return `<Frame name="Menu" w={200} flex="col" bg="${c.bgPaper}" rounded={${r}} shadow="0 4 12 #0000001a" stroke="${c.border}" strokeWidth={1} overflow="hidden" py={8}>
+${menuItems}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PAGINATION — CDS: rounded/circular, sizes 26/32/40
+// ---------------------------------------------------------------------------
+components.pagination = {
+  name: 'Pagination',
+  description: 'CDS page navigation controls',
+
+  render({ total = 10, current = 3, size = 'medium', shape = 'circular' } = {}) {
+    const c = colors();
+    const itemSize = p(`--sizing/pagination/${size}`);
+    const r = shape === 'circular' ? itemSize : 4;
+    const pages = [1, 2, 3, '...', total - 1, total];
+
+    const pageItems = pages.map(page => {
+      const isCurrent = page === current;
+      const bg = isCurrent ? c.primary : 'transparent';
+      const textColor = isCurrent ? '#ffffff' : c.textPrimary;
+      return `  <Frame w={${itemSize}} h={${itemSize}} bg="${bg}" rounded={${r}} flex="row" items="center" justify="center">
+    <Text size={${size === 'small' ? 12 : 14}} color="${textColor}">${page}</Text>
+  </Frame>`;
+    }).join('\n');
+
+    return `<Frame name="Pagination" flex="row" items="center" gap={4}>
+  <Frame w={${itemSize}} h={${itemSize}} rounded={${r}} flex="row" items="center" justify="center">
+    <Text size={14} color="${c.textSecondary}">‹</Text>
+  </Frame>
+${pageItems}
+  <Frame w={${itemSize}} h={${itemSize}} rounded={${r}} flex="row" items="center" justify="center">
+    <Text size={14} color="${c.textSecondary}">›</Text>
+  </Frame>
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// AVATAR GROUP — CDS: stacked avatars
+// ---------------------------------------------------------------------------
+components.avatargroup = {
+  name: 'Avatar Group',
+  description: 'CDS stacked avatar cluster',
+
+  render({ count = 4, max = 3, size = 'medium' } = {}) {
+    const c = colors();
+    const dim = p(`--sizing/avatar/${size}`);
+    const colorPalette = [c.primary, c.secondary, c.error, c.success, c.info, c.warning];
+    const overlap = Math.round(dim * 0.3);
+
+    const avatars = Array.from({ length: Math.min(count, max) }, (_, i) => {
+      const bg = colorPalette[i % colorPalette.length];
+      const initials = String.fromCharCode(65 + i);
+      return `  <Frame w={${dim}} h={${dim}} bg="${bg}" rounded={${dim}} flex="row" items="center" justify="center" stroke="#ffffff" strokeWidth={2}>
+    <Text size={${Math.round(dim * 0.35)}} weight="400" color="#ffffff">${initials}</Text>
+  </Frame>`;
+    }).join('\n');
+
+    const extraCount = count - max;
+    const extra = extraCount > 0
+      ? `\n  <Frame w={${dim}} h={${dim}} bg="${c.grey300}" rounded={${dim}} flex="row" items="center" justify="center" stroke="#ffffff" strokeWidth={2}>
+    <Text size={${Math.round(dim * 0.3)}} weight="500" color="${c.textPrimary}">+${extraCount}</Text>
+  </Frame>`
+      : '';
+
+    return `<Frame name="AvatarGroup" flex="row">
+${avatars}${extra}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// IMAGE LIST — CDS: responsive image grid
+// ---------------------------------------------------------------------------
+components.imagelist = {
+  name: 'Image List',
+  description: 'CDS image grid layout',
+
+  render({ cols = 3, gap = 8, itemHeight = 160, items = 6, width = 480 } = {}) {
+    const c = colors();
+    const itemW = Math.floor((width - gap * (cols - 1)) / cols);
+
+    const images = Array.from({ length: items }, (_, i) =>
+      `  <Frame w={${itemW}} h={${itemHeight}} bg="${c.grey200}" rounded={4} flex="row" items="center" justify="center">
+    <Text size={12} color="${c.textDisabled}">Image ${i + 1}</Text>
+  </Frame>`
+    ).join('\n');
+
+    return `<Frame name="ImageList" w={${width}} flex="row" gap={${gap}} wrap={true}>
+${images}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// BACKDROP — CDS: overlay
+// ---------------------------------------------------------------------------
+components.backdrop = {
+  name: 'Backdrop',
+  description: 'CDS fullscreen overlay backdrop',
+
+  render({ opacity = 'standard' } = {}) {
+    return `<Frame name="Backdrop" w={800} h={600} bg="rgba(0,0,0,0.5)" flex="row" items="center" justify="center">
+  <Frame w={40} h={40} rounded={40} stroke="#ffffff" strokeWidth={3} />
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// LINEAR PROGRESS — CDS: horizontal bar
+// ---------------------------------------------------------------------------
+components.linearprogress = {
+  name: 'Linear Progress',
+  description: 'CDS horizontal progress bar',
+
+  render({ value = 60, variant = 'determinate', color = 'primary', width = 200 } = {}) {
+    const c = colors();
+    const barColor = color === 'secondary' ? c.secondary : color === 'error' ? c.error : c.primary;
+    const barW = variant === 'indeterminate' ? Math.round(width * 0.4) : Math.round(width * value / 100);
+
+    return `<Frame name="LinearProgress" w={${width}} h={4} bg="${c.grey200}" rounded={2}>
+  <Frame w={${barW}} h={4} bg="${barColor}" rounded={2} />
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// CIRCULAR PROGRESS — CDS: spinner
+// ---------------------------------------------------------------------------
+components.circularprogress = {
+  name: 'Circular Progress',
+  description: 'CDS circular spinner indicator',
+
+  render({ size = 'medium', value = 75, showLabel = true } = {}) {
+    const c = colors();
+    const sizeMap = { small: 20, medium: 40, large: 60 };
+    const dim = sizeMap[size] || 40;
+
+    return `<Frame name="CircularProgress/${size}" w={${dim}} h={${dim}} rounded={${dim}} stroke="${c.primary}" strokeWidth={${size === 'small' ? 2 : 4}} bg="transparent" flex="row" items="center" justify="center">
+  ${showLabel && size !== 'small' ? `<Text size={${size === 'large' ? 16 : 12}} weight="500" color="${c.textPrimary}">${value}%</Text>` : ''}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// TYPOGRAPHY — CDS: showcase display of all type styles
+// ---------------------------------------------------------------------------
+components.typography = {
+  name: 'Typography',
+  description: 'CDS typography scale showcase',
+
+  render({ variant = 'showcase' } = {}) {
+    const c = colors();
+
+    return `<Frame name="Typography/showcase" w={600} flex="col" gap={16} p={32} bg="${c.bgPaper}" rounded={${radius('card')}}>
+  <Text size={60} weight="600" color="${c.textPrimary}">Display 1</Text>
+  <Text size={48} weight="600" color="${c.textPrimary}">Heading H1</Text>
+  <Text size={32} weight="600" color="${c.textPrimary}">Heading H2</Text>
+  <Text size={24} weight="600" color="${c.textPrimary}">Heading H3</Text>
+  <Text size={20} weight="600" color="${c.textPrimary}">Heading H4</Text>
+  <Text size={16} weight="600" color="${c.textPrimary}">Heading H5</Text>
+  <Text size={14} weight="600" color="${c.textPrimary}">Heading H6</Text>
+  <Frame w="fill" h={1} bg="${c.divider}" />
+  <Text size={16} weight="400" color="${c.textPrimary}">Subtitle 1 — Regular weight for subtitles</Text>
+  <Text size={14} weight="500" color="${c.textPrimary}">Subtitle 2 — Medium weight for emphasis</Text>
+  <Text size={14} weight="400" color="${c.textPrimary}">Body 1 — Primary body text for content</Text>
+  <Text size={12} weight="400" color="${c.textSecondary}">Body 2 — Secondary body text, smaller</Text>
+  <Text size={14} weight="500" color="${c.primary}">BUTTON — Medium weight, no uppercase</Text>
+  <Text size={12} weight="500" color="${c.textSecondary}">Caption — Small text for labels</Text>
+  <Text size={12} weight="400" color="${c.textTertiary}">OVERLINE — Uppercase small text</Text>
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// LOGO — OpenGov branding
+// ---------------------------------------------------------------------------
+components.logo = {
+  name: 'Logo',
+  description: 'OpenGov logo placeholder with CDS branding',
+
+  render({ type = 'logo', variant = 'fullcolor', size = 'medium' } = {}) {
+    const c = colors();
+    const sizeMap = {
+      small: { w: 80, h: 23 },
+      medium: { w: 120, h: 34 },
+      large: { w: 200, h: 57 },
+    };
+    const dims = sizeMap[size] || sizeMap.medium;
+
+    if (type === 'wand') {
+      const wSize = size === 'small' ? 32 : size === 'large' ? 64 : 48;
+      return `<Frame name="OpenGovWand/${variant}/${size}" w={${wSize}} h={${wSize}} bg="${c.primary}" rounded={${Math.round(wSize * 0.2)}} flex="row" items="center" justify="center">
+  <Text size={${Math.round(wSize * 0.5)}} weight="600" color="#ffffff">✦</Text>
+</Frame>`;
+    }
+
+    const bg = variant === 'white' || variant === 'reverse' ? c.grey900 : c.bgPaper;
+    const textColor = variant === 'white' || variant === 'reverse' ? '#ffffff' :
+                       variant === 'blurple' ? c.primary :
+                       variant === 'gray' ? c.grey500 :
+                       variant === 'black' ? c.grey900 : c.primary;
+
+    return `<Frame name="Logo/${variant}/${size}" w={${dims.w}} h={${dims.h}} bg="${bg}" flex="row" items="center" justify="center" rounded={4}>
+  <Text size={${Math.round(dims.h * 0.45)}} weight="600" color="${textColor}">OpenGov</Text>
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PATTERN: LOGIN FORM — CDS standard login pattern
+// ---------------------------------------------------------------------------
+components.loginform = {
+  name: 'Login Form',
+  description: 'CDS standard login page pattern',
+
+  render({ title = 'Sign In', hasLogo = true, hasForgotPassword = true, hasSignUp = true } = {}) {
+    const c = colors();
+    const r = radius('card');
+
+    const logoJsx = hasLogo
+      ? `\n    ${components.logo.render({ size: 'medium', variant: 'fullcolor' })}`
+      : '';
+    const forgotJsx = hasForgotPassword
+      ? `\n    <Text size={14} weight="500" color="${c.primary}">Forgot password?</Text>`
+      : '';
+    const signUpJsx = hasSignUp
+      ? `\n    <Frame w="fill" flex="row" items="center" justify="center" gap={4}>
+      <Text size={14} color="${c.textSecondary}">Don't have an account?</Text>
+      <Text size={14} weight="500" color="${c.primary}">Sign Up</Text>
+    </Frame>`
+      : '';
+
+    return `<Frame name="Pattern/LoginForm" w={400} flex="col" items="center" gap={24} p={32} bg="${c.bgPaper}" rounded={${r}} shadow="0 4 12 #0000001a">
+    ${logoJsx}
+    <Text size={24} weight="600" color="${c.textPrimary}">${title}</Text>
+    ${components.textfield.render({ label: 'Email', placeholder: 'email@example.com', size: 'medium' })}
+    ${components.textfield.render({ label: 'Password', placeholder: '••••••••', size: 'medium' })}
+    ${forgotJsx}
+    ${components.button.render({ variant: 'contained', size: 'large', label: 'Sign In', color: 'primary' })}
+    <Frame w="fill" flex="row" items="center" gap={8}>
+      <Frame h={1} bg="${c.divider}" grow={1} />
+      <Text size={12} color="${c.textDisabled}">OR</Text>
+      <Frame h={1} bg="${c.divider}" grow={1} />
+    </Frame>${signUpJsx}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PATTERN: DASHBOARD — CDS dashboard layout
+// ---------------------------------------------------------------------------
+components.dashboard = {
+  name: 'Dashboard',
+  description: 'CDS dashboard layout pattern',
+
+  render({ title = 'Dashboard', metrics = [
+    { label: 'Total Users', value: '12,847' },
+    { label: 'Revenue', value: '$48,290' },
+    { label: 'Active Now', value: '2,345' },
+    { label: 'Conversion', value: '3.2%' },
+  ] } = {}) {
+    const c = colors();
+
+    const metricCards = metrics.map(m =>
+      `    <Frame flex="col" gap={8} p={${spacing(4)}} bg="${c.bgPaper}" rounded={${radius('card')}} grow={1} shadow="0 1 3 #0000001a">
+      <Text size={12} weight="500" color="${c.textSecondary}">${m.label}</Text>
+      <Text size={24} weight="600" color="${c.textPrimary}">${m.value}</Text>
+    </Frame>`
+    ).join('\n');
+
+    return `<Frame name="Pattern/Dashboard" w={1200} flex="col" gap={24} p={${spacing(6)}} bg="${c.bgDefault}">
+  ${components.appbar.render({ title })}
+  <Frame w="fill" flex="row" gap={24}>
+${metricCards}
+  </Frame>
+  <Frame w="fill" flex="row" gap={24}>
+    <Frame flex="col" gap={16} grow={2} p={${spacing(4)}} bg="${c.bgPaper}" rounded={${radius('card')}} shadow="0 1 3 #0000001a">
+      <Text size={18} weight="600" color="${c.textPrimary}">Recent Activity</Text>
+      ${components.list.render({ width: 600 })}
+    </Frame>
+    <Frame flex="col" gap={16} grow={1} p={${spacing(4)}} bg="${c.bgPaper}" rounded={${radius('card')}} shadow="0 1 3 #0000001a">
+      <Text size={18} weight="600" color="${c.textPrimary}">Quick Actions</Text>
+      ${components.button.render({ variant: 'contained', size: 'medium', label: 'New Report' })}
+      ${components.button.render({ variant: 'outlined', size: 'medium', label: 'Export Data' })}
+      ${components.button.render({ variant: 'outlined', size: 'medium', label: 'Settings' })}
+    </Frame>
+  </Frame>
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PATTERN: PROFILE CARD — CDS user profile card
+// ---------------------------------------------------------------------------
+components.profilecard = {
+  name: 'Profile Card',
+  description: 'CDS user profile card pattern',
+
+  render({ name = 'John Doe', role = 'Product Designer', email = 'john@example.com', hasActions = true } = {}) {
+    const c = colors();
+    const r = radius('card');
+
+    const actionsJsx = hasActions
+      ? `\n  <Frame w="fill" flex="row" gap={8} justify="center">
+    ${components.button.render({ variant: 'outlined', size: 'small', label: 'Message' })}
+    ${components.button.render({ variant: 'contained', size: 'small', label: 'Follow' })}
+  </Frame>`
+      : '';
+
+    return `<Frame name="Pattern/ProfileCard" w={320} flex="col" items="center" gap={16} p={${spacing(6)}} bg="${c.bgPaper}" rounded={${r}} shadow="0 2 4 #0000001a">
+  ${components.avatar.render({ size: 'large', initials: name.split(' ').map(n => n[0]).join('') })}
+  <Frame flex="col" items="center" gap={4}>
+    <Text size={20} weight="600" color="${c.textPrimary}">${name}</Text>
+    <Text size={14} color="${c.textSecondary}">${role}</Text>
+    <Text size={12} color="${c.textTertiary}">${email}</Text>
+  </Frame>${actionsJsx}
+</Frame>`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PATTERN: CONTACT FORM — CDS multi-field form
+// ---------------------------------------------------------------------------
+components.contactform = {
+  name: 'Contact Form',
+  description: 'CDS contact/feedback form pattern',
+
+  render({ title = 'Contact Us', hasAlert = true } = {}) {
+    const c = colors();
+    const r = radius('card');
+
+    const alertJsx = hasAlert
+      ? `\n  ${components.alert.render({ severity: 'info', message: 'We typically respond within 24 hours.' })}`
+      : '';
+
+    return `<Frame name="Pattern/ContactForm" w={480} flex="col" gap={24} p={${spacing(6)}} bg="${c.bgPaper}" rounded={${r}} shadow="0 2 4 #0000001a">
+  <Text size={24} weight="600" color="${c.textPrimary}">${title}</Text>
+  <Frame w="fill" flex="row" gap={16}>
+    ${components.textfield.render({ label: 'First Name', placeholder: 'John' })}
+    ${components.textfield.render({ label: 'Last Name', placeholder: 'Doe' })}
+  </Frame>
+  ${components.textfield.render({ label: 'Email', placeholder: 'john@example.com' })}
+  <Frame name="TextArea" w="fill" flex="col" gap={4}>
+    <Text size={14} weight="400" color="${c.textSecondary}">Message</Text>
+    <Frame w="fill" h={120} flex="col" p={12} bg="${c.bgPaper}" stroke="${c.border}" strokeWidth={1} rounded={${radius('input')}}>
+      <Text size={14} color="${c.textDisabled}">Tell us how we can help...</Text>
+    </Frame>
+  </Frame>${alertJsx}
+  <Frame w="fill" flex="row" justify="end" gap={12}>
+    ${components.button.render({ variant: 'text', size: 'medium', label: 'Cancel' })}
+    ${components.button.render({ variant: 'contained', size: 'medium', label: 'Send Message' })}
+  </Frame>
 </Frame>`;
   }
 };

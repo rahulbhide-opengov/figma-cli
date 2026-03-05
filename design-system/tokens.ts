@@ -1,14 +1,14 @@
 /**
- * CDS Design System Token Specification
+ * CDS Design System Token Specification — COMPLETE
  *
  * Source of truth: https://github.com/rahulbhide-opengov/CDS-Design-System
- * All values match CDS theme/tokens.ts exactly.
+ * Extracted from: src/theme/tokens.ts (CDS v3.0.0)
  *
+ * Every token here exactly mirrors the CDS Design System.
  * Naming Convention: --{category}/{subcategory}/{property}
  * Desktop values used as defaults (Figma canvases are typically desktop-first).
- * Responsive variants (tablet/mobile) noted where applicable.
  *
- * @version 3.0.0
+ * @version 3.1.0
  * @date 2026-02-26
  */
 
@@ -23,16 +23,9 @@ export interface TokenCategory {
 }
 
 // ============================================================================
-// SECTION 1: TYPOGRAPHY TOKENS
+// SECTION 1: TYPOGRAPHY TOKENS — DM Sans, CDS Brand
 // ============================================================================
 
-/**
- * Font: DM Sans (CDS brand typography)
- * Weight scale: 300 (Light), 400 (Regular), 500 (Medium), 600 (SemiBold), 700 (Bold)
- * All heading weights are 600 (SemiBold) per CDS spec
- * All button weights are 500 (Medium) per CDS spec
- * Desktop values shown; see cds-tokens.ts for tablet/mobile variants
- */
 export const typographyTokens: TokenMap = {
   // Font Families
   '--typography/font-family/primary': '"DM Sans", "DM_Sans:Regular", "DM_Sans:Medium", sans-serif',
@@ -45,7 +38,10 @@ export const typographyTokens: TokenMap = {
   '--typography/font-weight/semibold': '600',
   '--typography/font-weight/bold': '700',
 
-  // Display Styles (Desktop values)
+  // Base Font Size
+  '--typography/font-size/base': '14px',
+
+  // ── Display Styles (Desktop) ──
   '--typography/display/1/font-size': '60px',
   '--typography/display/1/font-weight': '600',
   '--typography/display/1/line-height': '72px',
@@ -71,7 +67,7 @@ export const typographyTokens: TokenMap = {
   '--typography/display/5/line-height': '40px',
   '--typography/display/5/letter-spacing': '-0.4px',
 
-  // Headings h1-h6 (Desktop values, weight 600 per CDS)
+  // ── Headings H1–H6 (Desktop, weight 600) ──
   '--typography/heading/h1/font-size': '48px',
   '--typography/heading/h1/font-weight': '600',
   '--typography/heading/h1/line-height': '56px',
@@ -102,7 +98,7 @@ export const typographyTokens: TokenMap = {
   '--typography/heading/h6/line-height': '20px',
   '--typography/heading/h6/letter-spacing': '0px',
 
-  // Body Text (Desktop values)
+  // ── Body Text (Desktop) — body1 through body4 ──
   '--typography/body/large/font-size': '14px',
   '--typography/body/large/font-weight': '400',
   '--typography/body/large/line-height': '20px',
@@ -118,7 +114,12 @@ export const typographyTokens: TokenMap = {
   '--typography/body/small/line-height': '16px',
   '--typography/body/small/letter-spacing': '0.17px',
 
-  // Subtitles
+  '--typography/body/extra-small/font-size': '12px',
+  '--typography/body/extra-small/font-weight': '400',
+  '--typography/body/extra-small/line-height': '16px',
+  '--typography/body/extra-small/letter-spacing': '0.17px',
+
+  // ── Subtitles ──
   '--typography/subtitle/1/font-size': '16px',
   '--typography/subtitle/1/font-weight': '400',
   '--typography/subtitle/1/line-height': '24px',
@@ -129,7 +130,7 @@ export const typographyTokens: TokenMap = {
   '--typography/subtitle/2/line-height': '20px',
   '--typography/subtitle/2/letter-spacing': '0.1px',
 
-  // Input Labels (Desktop values)
+  // ── Input Labels (Desktop) ──
   '--typography/input/label/small/font-size': '14px',
   '--typography/input/label/small/font-weight': '400',
   '--typography/input/label/small/line-height': '20px',
@@ -149,23 +150,28 @@ export const typographyTokens: TokenMap = {
   '--typography/input/value/small/font-size': '16px',
   '--typography/input/value/small/font-weight': '500',
   '--typography/input/value/small/line-height': '24px',
+  '--typography/input/value/small/letter-spacing': '0.25px',
 
   '--typography/input/value/medium/font-size': '16px',
   '--typography/input/value/medium/font-weight': '500',
   '--typography/input/value/medium/line-height': '24px',
+  '--typography/input/value/medium/letter-spacing': '0.25px',
 
   '--typography/input/value/large/font-size': '20px',
   '--typography/input/value/large/font-weight': '500',
   '--typography/input/value/large/line-height': '28px',
+  '--typography/input/value/large/letter-spacing': '0.25px',
 
   // Helper & Description
   '--typography/input/helper/font-size': '14px',
   '--typography/input/helper/font-weight': '400',
   '--typography/input/helper/line-height': '20px',
+  '--typography/input/helper/letter-spacing': '0.15px',
 
   '--typography/input/description/font-size': '16px',
   '--typography/input/description/font-weight': '400',
   '--typography/input/description/line-height': '24px',
+  '--typography/input/description/letter-spacing': '0.15px',
 
   // Helper Text & Captions
   '--typography/helper-text/font-size': '14px',
@@ -178,14 +184,13 @@ export const typographyTokens: TokenMap = {
   '--typography/caption/line-height': '16px',
   '--typography/caption/letter-spacing': '0.4px',
 
-  // Overline
   '--typography/overline/font-size': '12px',
   '--typography/overline/font-weight': '400',
   '--typography/overline/line-height': '32px',
   '--typography/overline/letter-spacing': '1px',
   '--typography/overline/text-transform': 'uppercase',
 
-  // Button Typography (Desktop, weight 500 per CDS)
+  // ── Button Typography (Desktop, weight 500) ──
   '--typography/button/large/font-size': '16px',
   '--typography/button/large/font-weight': '500',
   '--typography/button/large/line-height': '24px',
@@ -201,94 +206,131 @@ export const typographyTokens: TokenMap = {
   '--typography/button/small/line-height': '16px',
   '--typography/button/small/letter-spacing': '0px',
 
-  // Chip Typography (Desktop)
+  // ── Chip Typography (Desktop) ──
   '--typography/chip/large/font-size': '16px',
   '--typography/chip/large/font-weight': '500',
   '--typography/chip/large/line-height': '20px',
+  '--typography/chip/large/letter-spacing': '0.16px',
 
   '--typography/chip/medium/font-size': '14px',
   '--typography/chip/medium/font-weight': '500',
   '--typography/chip/medium/line-height': '18px',
+  '--typography/chip/medium/letter-spacing': '0.16px',
 
   '--typography/chip/small/font-size': '12px',
   '--typography/chip/small/font-weight': '500',
   '--typography/chip/small/line-height': '16px',
+  '--typography/chip/small/letter-spacing': '0.16px',
 
-  // Avatar Typography
+  // ── Avatar Typography ──
   '--typography/avatar/large/font-size': '20px',
   '--typography/avatar/large/font-weight': '400',
+  '--typography/avatar/large/line-height': '28px',
+  '--typography/avatar/large/letter-spacing': '0.16px',
+
   '--typography/avatar/medium/font-size': '14px',
   '--typography/avatar/medium/font-weight': '400',
+  '--typography/avatar/medium/line-height': '20px',
+  '--typography/avatar/medium/letter-spacing': '0.16px',
+
   '--typography/avatar/small/font-size': '14px',
   '--typography/avatar/small/font-weight': '400',
+  '--typography/avatar/small/line-height': '20px',
+  '--typography/avatar/small/letter-spacing': '0.16px',
 
-  // Table Typography
+  // ── Table Typography ──
   '--typography/table/header/font-size': '14px',
   '--typography/table/header/font-weight': '600',
   '--typography/table/header/line-height': '20px',
+  '--typography/table/header/letter-spacing': '0.16px',
+
   '--typography/table/cell/font-size': '14px',
   '--typography/table/cell/font-weight': '400',
   '--typography/table/cell/line-height': '20px',
+  '--typography/table/cell/letter-spacing': '0.16px',
+
   '--typography/table/footer/font-size': '14px',
   '--typography/table/footer/font-weight': '400',
+  '--typography/table/footer/line-height': '20px',
+  '--typography/table/footer/letter-spacing': '0.16px',
 
-  // Alert Typography
+  // ── Alert Typography ──
   '--typography/alert/title/font-size': '18px',
   '--typography/alert/title/font-weight': '600',
   '--typography/alert/title/line-height': '24px',
+  '--typography/alert/title/letter-spacing': '0.15px',
+
   '--typography/alert/description/font-size': '14px',
   '--typography/alert/description/font-weight': '400',
+  '--typography/alert/description/line-height': '20px',
+  '--typography/alert/description/letter-spacing': '0.15px',
 
-  // Dialog Typography
+  // ── Dialog Typography ──
   '--typography/dialog/title/font-size': '20px',
   '--typography/dialog/title/font-weight': '600',
   '--typography/dialog/title/line-height': '28px',
+  '--typography/dialog/title/letter-spacing': '0.15px',
+
   '--typography/dialog/content/font-size': '14px',
   '--typography/dialog/content/font-weight': '400',
+  '--typography/dialog/content/line-height': '20px',
+  '--typography/dialog/content/letter-spacing': '0.15px',
 
-  // Badge Typography
+  // ── Badge, Tooltip, Stepper, Slider Typography ──
   '--typography/badge/font-size': '12px',
   '--typography/badge/font-weight': '500',
   '--typography/badge/line-height': '16px',
+  '--typography/badge/letter-spacing': '0.14px',
 
-  // Tooltip Typography
   '--typography/tooltip/font-size': '12px',
   '--typography/tooltip/font-weight': '500',
   '--typography/tooltip/line-height': '16px',
+  '--typography/tooltip/letter-spacing': '0.14px',
 
-  // Stepper Typography
   '--typography/stepper/label/font-size': '14px',
   '--typography/stepper/label/font-weight': '400',
+  '--typography/stepper/label/line-height': '20px',
+  '--typography/stepper/label/letter-spacing': '0.15px',
 
-  // Menu Item Typography (Desktop)
-  '--typography/menu-item/default/font-size': '24px',
-  '--typography/menu-item/default/font-weight': '400',
-  '--typography/menu-item/dense/font-size': '20px',
-  '--typography/menu-item/dense/font-weight': '400',
-
-  // Bottom Navigation Typography
-  '--typography/bottom-nav/actions/font-size': '12px',
-  '--typography/bottom-nav/actions/font-weight': '500',
-  '--typography/bottom-nav/default/font-size': '14px',
-  '--typography/bottom-nav/default/font-weight': '500',
-
-  // Slider Typography
   '--typography/slider/value-label/font-size': '12px',
   '--typography/slider/value-label/font-weight': '500',
+  '--typography/slider/value-label/line-height': '16px',
+  '--typography/slider/value-label/letter-spacing': '0.14px',
+
+  // ── Rating Typography ──
+  '--typography/rating/icon/font-size': '24px',
+  '--typography/rating/icon/font-weight': '400',
+  '--typography/rating/icon/line-height': '24px',
+
+  // ── Menu Item Typography (Desktop) ──
+  '--typography/menu-item/default/font-size': '24px',
+  '--typography/menu-item/default/font-weight': '400',
+  '--typography/menu-item/default/line-height': '32px',
+  '--typography/menu-item/default/letter-spacing': '0.15px',
+
+  '--typography/menu-item/dense/font-size': '20px',
+  '--typography/menu-item/dense/font-weight': '400',
+  '--typography/menu-item/dense/line-height': '28px',
+  '--typography/menu-item/dense/letter-spacing': '0.15px',
+
+  // ── Bottom Navigation Typography ──
+  '--typography/bottom-nav/actions/font-size': '12px',
+  '--typography/bottom-nav/actions/font-weight': '500',
+  '--typography/bottom-nav/actions/line-height': '16px',
+  '--typography/bottom-nav/actions/letter-spacing': '0.15px',
+
+  '--typography/bottom-nav/default/font-size': '14px',
+  '--typography/bottom-nav/default/font-weight': '500',
+  '--typography/bottom-nav/default/line-height': '20px',
+  '--typography/bottom-nav/default/letter-spacing': '0.15px',
 };
 
 // ============================================================================
-// SECTION 2: COLOR TOKENS — CDS Brand Colors
+// SECTION 2: COLOR TOKENS — CDS Brand Colors (COMPLETE)
 // ============================================================================
 
-/**
- * CDS Brand Color System:
- * - Primary: Blurple scale (50-900), main at 700 (#4B3FFF)
- * - Secondary: Slate scale (50-900), main at 700 (#546574)
- * - Semantic: error (#d32f2f), warning (#ed6c02), success (#2e7d32), info (#0288d1)
- */
 export const colorTokens: TokenMap = {
-  // Primary Colors — Blurple Scale
+  // ── Primary Colors — Blurple Scale ──
   '--colors/primary/50': '#f5f3ff',
   '--colors/primary/100': '#eef1fc',
   '--colors/primary/200': '#d6d4ff',
@@ -300,7 +342,7 @@ export const colorTokens: TokenMap = {
   '--colors/primary/dark': '#19009b',
   '--colors/primary/contrast-text': '#ffffff',
 
-  // Secondary Colors — Slate Scale
+  // ── Secondary Colors — Slate Scale ──
   '--colors/secondary/50': '#f8f9fa',
   '--colors/secondary/100': '#e9ecef',
   '--colors/secondary/200': '#cbd2d9',
@@ -312,7 +354,7 @@ export const colorTokens: TokenMap = {
   '--colors/secondary/dark': '#2d3748',
   '--colors/secondary/contrast-text': '#ffffff',
 
-  // Grey Scale
+  // ── Grey Scale (complete) ──
   '--colors/grey/50': '#fafafa',
   '--colors/grey/100': '#f2f2f2',
   '--colors/grey/200': '#eeeeee',
@@ -323,8 +365,12 @@ export const colorTokens: TokenMap = {
   '--colors/grey/700': '#616161',
   '--colors/grey/800': '#424242',
   '--colors/grey/900': '#212121',
+  '--colors/grey/A100': '#f5f5f5',
+  '--colors/grey/A200': '#eeeeee',
+  '--colors/grey/A400': '#bdbdbd',
+  '--colors/grey/A700': '#616161',
 
-  // Error Colors
+  // ── Error Colors ──
   '--colors/error/main': '#d32f2f',
   '--colors/error/alternate': '#d33423',
   '--colors/error/light': '#ef5350',
@@ -332,14 +378,14 @@ export const colorTokens: TokenMap = {
   '--colors/error/dark-text': '#5f2120',
   '--colors/error/contrast-text': '#ffffff',
 
-  // Success Colors
+  // ── Success Colors ──
   '--colors/success/main': '#2e7d32',
   '--colors/success/light': '#4caf50',
   '--colors/success/dark': '#1b5e20',
   '--colors/success/dark-text': '#1e4620',
   '--colors/success/contrast-text': '#ffffff',
 
-  // Warning Colors
+  // ── Warning Colors ──
   '--colors/warning/main': '#ed6c02',
   '--colors/warning/alternate': '#f5a300',
   '--colors/warning/light': '#faaf00',
@@ -347,7 +393,7 @@ export const colorTokens: TokenMap = {
   '--colors/warning/dark-text': '#663c00',
   '--colors/warning/contrast-text': '#ffffff',
 
-  // Info Colors
+  // ── Info Colors ──
   '--colors/info/main': '#0288d1',
   '--colors/info/alternate': '#1976d2',
   '--colors/info/light': '#42a5f5',
@@ -356,14 +402,14 @@ export const colorTokens: TokenMap = {
   '--colors/info/dark-text': '#014361',
   '--colors/info/contrast-text': '#ffffff',
 
-  // Text Colors (Light Theme)
+  // ── Text Colors (Light Theme) ──
   '--colors/text/primary': 'rgba(0, 0, 0, 0.87)',
   '--colors/text/secondary': 'rgba(0, 0, 0, 0.6)',
   '--colors/text/tertiary': 'rgba(0, 0, 0, 0.54)',
   '--colors/text/disabled': 'rgba(0, 0, 0, 0.38)',
   '--colors/text/hint': 'rgba(0, 0, 0, 0.26)',
 
-  // Background Colors (Light Theme)
+  // ── Background Colors (Light Theme) ──
   '--colors/background/default': '#fafafa',
   '--colors/background/paper': '#ffffff',
   '--colors/background/tertiary': '#f2f2f2',
@@ -371,13 +417,13 @@ export const colorTokens: TokenMap = {
   '--colors/background/paper-elevation-2': '#eeeeee',
   '--colors/background/paper-elevation-4': '#e0e0e0',
 
-  // Divider & Borders
+  // ── Divider & Borders ──
   '--colors/divider': 'rgba(0, 0, 0, 0.12)',
   '--colors/border/default': 'rgba(0, 0, 0, 0.12)',
   '--colors/border/focus': '#4b3fff',
   '--colors/border/error': '#d32f2f',
 
-  // Action Colors
+  // ── Action Colors ──
   '--colors/action/active': 'rgba(0, 0, 0, 0.54)',
   '--colors/action/hover': 'rgba(0, 0, 0, 0.04)',
   '--colors/action/subtle': 'rgba(0, 0, 0, 0.02)',
@@ -387,40 +433,75 @@ export const colorTokens: TokenMap = {
   '--colors/action/focus': 'rgba(0, 0, 0, 0.12)',
   '--colors/action/track': 'rgba(0, 0, 0, 0.11)',
 
-  // Primary State Colors (Light Theme — Blurple 700 based)
+  // ── Primary State Colors (Light Theme — Blurple 700 based) ──
   '--colors/primary-states/hover': 'rgba(75, 63, 255, 0.04)',
   '--colors/primary-states/selected': 'rgba(75, 63, 255, 0.08)',
   '--colors/primary-states/focus': 'rgba(75, 63, 255, 0.12)',
   '--colors/primary-states/focus-visible': 'rgba(75, 63, 255, 0.30)',
   '--colors/primary-states/outlined-border': 'rgba(75, 63, 255, 0.50)',
 
-  // Secondary State Colors (Light Theme — Slate 700 based)
+  // ── Secondary State Colors (Light Theme — Slate 700 based) ──
   '--colors/secondary-states/hover': 'rgba(84, 101, 116, 0.04)',
   '--colors/secondary-states/selected': 'rgba(84, 101, 116, 0.08)',
   '--colors/secondary-states/focus': 'rgba(84, 101, 116, 0.12)',
   '--colors/secondary-states/focus-visible': 'rgba(84, 101, 116, 0.30)',
   '--colors/secondary-states/outlined-border': 'rgba(84, 101, 116, 0.50)',
 
-  // Backdrop/Overlay Colors
+  // ── Backdrop/Overlay Colors ──
   '--colors/backdrop/light': 'rgba(0, 0, 0, 0.3)',
   '--colors/backdrop/standard': 'rgba(0, 0, 0, 0.5)',
   '--colors/backdrop/dark': 'rgba(0, 0, 0, 0.7)',
   '--colors/backdrop/heavy': 'rgba(0, 0, 0, 0.8)',
 
-  // White Overlays (for dark backgrounds)
+  // ── White Overlays (for dark backgrounds) ──
   '--colors/white-overlay/hover': 'rgba(255, 255, 255, 0.12)',
   '--colors/white-overlay/selected': 'rgba(255, 255, 255, 0.15)',
   '--colors/white-overlay/active': 'rgba(255, 255, 255, 0.54)',
 
-  // Primary Opacity Variants
+  // ── Primary Opacity Variants (complete) ──
   '--colors/primary-opacity/4': 'rgba(75, 63, 255, 0.04)',
   '--colors/primary-opacity/8': 'rgba(75, 63, 255, 0.08)',
   '--colors/primary-opacity/12': 'rgba(75, 63, 255, 0.12)',
   '--colors/primary-opacity/20': 'rgba(75, 63, 255, 0.2)',
   '--colors/primary-opacity/30': 'rgba(75, 63, 255, 0.3)',
+  '--colors/primary-opacity/38': 'rgba(75, 63, 255, 0.38)',
   '--colors/primary-opacity/50': 'rgba(75, 63, 255, 0.5)',
+  '--colors/primary-opacity/70': 'rgba(75, 63, 255, 0.7)',
+  '--colors/primary-opacity/100': 'rgba(75, 63, 255, 1)',
 
-  // Component-Specific Colors
+  // ── Secondary Opacity Variants ──
+  '--colors/secondary-opacity/4': 'rgba(84, 101, 116, 0.04)',
+  '--colors/secondary-opacity/8': 'rgba(84, 101, 116, 0.08)',
+  '--colors/secondary-opacity/12': 'rgba(84, 101, 116, 0.12)',
+  '--colors/secondary-opacity/30': 'rgba(84, 101, 116, 0.3)',
+  '--colors/secondary-opacity/50': 'rgba(84, 101, 116, 0.5)',
+  '--colors/secondary-opacity/70': 'rgba(84, 101, 116, 0.7)',
+
+  // ── Error Opacity Variants ──
+  '--colors/error-opacity/4': 'rgba(211, 47, 47, 0.04)',
+  '--colors/error-opacity/8': 'rgba(211, 47, 47, 0.08)',
+  '--colors/error-opacity/50': 'rgba(211, 47, 47, 0.5)',
+  '--colors/error-opacity/70': 'rgba(211, 47, 47, 0.7)',
+
+  // ── Success Opacity Variants ──
+  '--colors/success-opacity/4': 'rgba(46, 125, 50, 0.04)',
+  '--colors/success-opacity/8': 'rgba(46, 125, 50, 0.08)',
+  '--colors/success-opacity/50': 'rgba(46, 125, 50, 0.5)',
+  '--colors/success-opacity/70': 'rgba(46, 125, 50, 0.7)',
+
+  // ── Warning Opacity Variants ──
+  '--colors/warning-opacity/4': 'rgba(237, 108, 2, 0.04)',
+  '--colors/warning-opacity/8': 'rgba(237, 108, 2, 0.08)',
+  '--colors/warning-opacity/50': 'rgba(237, 108, 2, 0.5)',
+  '--colors/warning-opacity/70': 'rgba(237, 108, 2, 0.7)',
+
+  // ── Info Opacity Variants ──
+  '--colors/info-opacity/4': 'rgba(2, 136, 209, 0.04)',
+  '--colors/info-opacity/8': 'rgba(2, 136, 209, 0.08)',
+  '--colors/info-opacity/50': 'rgba(2, 136, 209, 0.5)',
+  '--colors/info-opacity/70': 'rgba(2, 136, 209, 0.7)',
+
+  // ── Component-Specific Colors ──
   '--colors/breadcrumb/text': 'rgba(0, 0, 0, 0.6)',
   '--colors/breadcrumb/separator': 'rgba(0, 0, 0, 0.38)',
   '--colors/breadcrumb/collapse-fill': '#e0e0e0',
@@ -454,19 +535,35 @@ export const colorTokens: TokenMap = {
   '--colors/table/row-hover': 'rgba(0, 0, 0, 0.04)',
   '--colors/table/row-selected': 'rgba(75, 63, 255, 0.08)',
   '--colors/table/border': 'rgba(0, 0, 0, 0.12)',
+
+  // ── Alert Severity Backgrounds ──
+  '--colors/alert/error-bg': '#fdeded',
+  '--colors/alert/warning-bg': '#fff4e5',
+  '--colors/alert/info-bg': '#e5f6fd',
+  '--colors/alert/success-bg': '#edf7ed',
+
+  // ── Read-Only State ──
+  '--colors/readonly/background': 'rgba(75, 63, 255, 0.08)',
+
+  // ── Disabled Input States ──
+  '--colors/disabled/background': '#f2f2f2',
+  '--colors/disabled/border': 'rgba(84, 101, 116, 0.5)',
+  '--colors/disabled/text': 'rgba(0, 0, 0, 0.6)',
 };
 
 /**
- * Dark theme color overrides
+ * Dark theme color overrides (complete with state colors)
  */
 export const darkThemeColorTokens: TokenMap = {
   '--colors/text/primary': 'rgba(255, 255, 255, 0.87)',
   '--colors/text/secondary': 'rgba(255, 255, 255, 0.6)',
+  '--colors/text/tertiary': 'rgba(255, 255, 255, 0.54)',
   '--colors/text/disabled': 'rgba(255, 255, 255, 0.38)',
   '--colors/text/hint': 'rgba(255, 255, 255, 0.38)',
 
   '--colors/background/default': '#121212',
   '--colors/background/paper': '#1e1e1e',
+  '--colors/background/tertiary': '#2c2c2c',
   '--colors/background/paper-elevation-1': '#2c2c2c',
   '--colors/background/paper-elevation-2': '#333333',
   '--colors/background/paper-elevation-4': '#3d3d3d',
@@ -481,14 +578,14 @@ export const darkThemeColorTokens: TokenMap = {
   '--colors/action/disabled-background': 'rgba(255, 255, 255, 0.12)',
   '--colors/action/focus': 'rgba(255, 255, 255, 0.12)',
 
-  // Primary State Colors (Dark Theme)
+  // Primary State Colors (Dark Theme — #94A8FF based)
   '--colors/primary-states/hover': 'rgba(148, 168, 255, 0.08)',
   '--colors/primary-states/selected': 'rgba(148, 168, 255, 0.16)',
   '--colors/primary-states/focus': 'rgba(148, 168, 255, 0.12)',
   '--colors/primary-states/focus-visible': 'rgba(148, 168, 255, 0.30)',
   '--colors/primary-states/outlined-border': 'rgba(148, 168, 255, 0.50)',
 
-  // Secondary State Colors (Dark Theme)
+  // Secondary State Colors (Dark Theme — #9CB1C3 based)
   '--colors/secondary-states/hover': 'rgba(156, 177, 195, 0.08)',
   '--colors/secondary-states/selected': 'rgba(156, 177, 195, 0.16)',
   '--colors/secondary-states/focus': 'rgba(156, 177, 195, 0.12)',
@@ -540,7 +637,7 @@ export const sizingTokens: TokenMap = {
   '--sizing/icon/medium': '24px',
   '--sizing/icon/large': '32px',
 
-  // Button Heights (Desktop values — CDS spec)
+  // Button Heights (Desktop — CDS spec)
   '--sizing/button/small': '28px',
   '--sizing/button/medium': '32px',
   '--sizing/button/large': '40px',
@@ -550,7 +647,7 @@ export const sizingTokens: TokenMap = {
   '--sizing/fab/medium': '40px',
   '--sizing/fab/large': '50px',
 
-  // Input Heights (Desktop values — CDS spec)
+  // Input Heights (Desktop — CDS spec)
   '--sizing/input/small': '28px',
   '--sizing/input/medium': '32px',
   '--sizing/input/large': '40px',
@@ -558,6 +655,7 @@ export const sizingTokens: TokenMap = {
   // Table Sizes (Desktop)
   '--sizing/table/header': '50px',
   '--sizing/table/cell': '50px',
+  '--sizing/table/dense-cell': '40px',
 
   // Chip Sizes (Desktop)
   '--sizing/chip/small': '28px',
@@ -569,14 +667,21 @@ export const sizingTokens: TokenMap = {
   '--sizing/chip-in-field/medium': '28px',
   '--sizing/chip-in-field/large': '32px',
 
-  // Avatar Sizes
-  '--sizing/avatar/small': '24px',
+  // Avatar Sizes (complete: xs through xl)
+  '--sizing/avatar/xs': '24px',
+  '--sizing/avatar/small': '32px',
   '--sizing/avatar/medium': '40px',
   '--sizing/avatar/large': '56px',
+  '--sizing/avatar/xl': '72px',
 
   // App Bar Height
   '--sizing/app-bar/mobile': '56px',
   '--sizing/app-bar/desktop': '64px',
+
+  // Bottom Navigation
+  '--sizing/bottom-nav/height': '56px',
+  '--sizing/bottom-nav/min-action-width': '80px',
+  '--sizing/bottom-nav/action-min-height': '48px',
 
   // Drawer Width
   '--sizing/drawer/standard': '240px',
@@ -588,10 +693,48 @@ export const sizingTokens: TokenMap = {
   '--sizing/container/md': '900px',
   '--sizing/container/lg': '1200px',
   '--sizing/container/xl': '1536px',
+
+  // Dialog Sizes
+  '--sizing/dialog/xs': '280px',
+  '--sizing/dialog/sm': '400px',
+  '--sizing/dialog/md': '600px',
+  '--sizing/dialog/lg': '800px',
+  '--sizing/dialog/xl': '1200px',
+
+  // Pagination
+  '--sizing/pagination/small': '26px',
+  '--sizing/pagination/medium': '32px',
+  '--sizing/pagination/large': '40px',
+
+  // Rating Sizes
+  '--sizing/rating/small': '20px',
+  '--sizing/rating/medium': '24px',
+  '--sizing/rating/large': '32px',
+
+  // Slider
+  '--sizing/slider/track-height': '4px',
+  '--sizing/slider/thumb': '20px',
+
+  // Badge
+  '--sizing/badge/standard': '20px',
+  '--sizing/badge/dot': '8px',
+
+  // Tab
+  '--sizing/tab/min-height': '48px',
+  '--sizing/tab/min-width': '80px',
+
+  // Menu Item
+  '--sizing/menu-item/min-height': '48px',
+
+  // List Item
+  '--sizing/list-item/min-height': '48px',
+
+  // Speed Dial
+  '--sizing/speed-dial/action': '40px',
 };
 
 // ============================================================================
-// SECTION 5: BORDER RADIUS TOKENS — CDS spec
+// SECTION 5: BORDER RADIUS TOKENS
 // ============================================================================
 
 export const borderRadiusTokens: TokenMap = {
@@ -603,7 +746,6 @@ export const borderRadiusTokens: TokenMap = {
   '--border-radius/circular': '50%',
   '--border-radius/full': '9999px',
 
-  // Component-specific (derived from CDS theme)
   '--border-radius/button': '4px',
   '--border-radius/input': '4px',
   '--border-radius/card': '4px',
@@ -611,10 +753,15 @@ export const borderRadiusTokens: TokenMap = {
   '--border-radius/dialog': '4px',
   '--border-radius/tooltip': '4px',
   '--border-radius/alert': '4px',
+  '--border-radius/paper': '4px',
+  '--border-radius/fab': '50%',
+  '--border-radius/skeleton-text': '2px',
+  '--border-radius/skeleton-rect': '4px',
+  '--border-radius/avatar': '50%',
 };
 
 // ============================================================================
-// SECTION 6: ELEVATION/SHADOW TOKENS — Full 24-level Material system
+// SECTION 6: ELEVATION/SHADOW TOKENS — Full 25-level Material system (0–24)
 // ============================================================================
 
 export const elevationTokens: TokenMap = {
@@ -631,12 +778,22 @@ export const elevationTokens: TokenMap = {
   '--elevation/10': '0px 6px 6px -3px rgba(0,0,0,0.2),0px 10px 14px 1px rgba(0,0,0,0.14),0px 4px 18px 3px rgba(0,0,0,0.12)',
   '--elevation/11': '0px 6px 7px -4px rgba(0,0,0,0.2),0px 11px 15px 1px rgba(0,0,0,0.14),0px 4px 20px 3px rgba(0,0,0,0.12)',
   '--elevation/12': '0px 7px 8px -4px rgba(0,0,0,0.2),0px 12px 17px 2px rgba(0,0,0,0.14),0px 5px 22px 4px rgba(0,0,0,0.12)',
+  '--elevation/13': '0px 7px 8px -4px rgba(0,0,0,0.2),0px 13px 19px 2px rgba(0,0,0,0.14),0px 5px 24px 4px rgba(0,0,0,0.12)',
+  '--elevation/14': '0px 7px 9px -4px rgba(0,0,0,0.2),0px 14px 21px 2px rgba(0,0,0,0.14),0px 5px 26px 4px rgba(0,0,0,0.12)',
+  '--elevation/15': '0px 8px 9px -5px rgba(0,0,0,0.2),0px 15px 22px 2px rgba(0,0,0,0.14),0px 6px 28px 5px rgba(0,0,0,0.12)',
   '--elevation/16': '0px 8px 10px -5px rgba(0,0,0,0.2),0px 16px 24px 2px rgba(0,0,0,0.14),0px 6px 30px 5px rgba(0,0,0,0.12)',
+  '--elevation/17': '0px 8px 11px -5px rgba(0,0,0,0.2),0px 17px 26px 2px rgba(0,0,0,0.14),0px 6px 32px 5px rgba(0,0,0,0.12)',
+  '--elevation/18': '0px 9px 11px -5px rgba(0,0,0,0.2),0px 18px 28px 2px rgba(0,0,0,0.14),0px 7px 34px 6px rgba(0,0,0,0.12)',
+  '--elevation/19': '0px 9px 12px -6px rgba(0,0,0,0.2),0px 19px 29px 2px rgba(0,0,0,0.14),0px 7px 36px 6px rgba(0,0,0,0.12)',
+  '--elevation/20': '0px 10px 13px -6px rgba(0,0,0,0.2),0px 20px 31px 3px rgba(0,0,0,0.14),0px 8px 38px 7px rgba(0,0,0,0.12)',
+  '--elevation/21': '0px 10px 13px -6px rgba(0,0,0,0.2),0px 21px 33px 3px rgba(0,0,0,0.14),0px 8px 40px 7px rgba(0,0,0,0.12)',
+  '--elevation/22': '0px 10px 14px -6px rgba(0,0,0,0.2),0px 22px 35px 3px rgba(0,0,0,0.14),0px 8px 42px 7px rgba(0,0,0,0.12)',
+  '--elevation/23': '0px 11px 14px -7px rgba(0,0,0,0.2),0px 23px 36px 3px rgba(0,0,0,0.14),0px 9px 44px 8px rgba(0,0,0,0.12)',
   '--elevation/24': '0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12)',
 };
 
 // ============================================================================
-// SECTION 7: Z-INDEX TOKENS — CDS spec
+// SECTION 7: Z-INDEX TOKENS
 // ============================================================================
 
 export const zIndexTokens: TokenMap = {
@@ -655,31 +812,31 @@ export const zIndexTokens: TokenMap = {
 // ============================================================================
 
 export const componentTokens: TokenMap = {
-  // Timeline Component
+  // Timeline
   '--component/timeline/dot-size': '12px',
   '--component/timeline/dot-border-width': '2px',
   '--component/timeline/connector-width': '2px',
   '--component/timeline/spacing-horizontal': '16px',
   '--component/timeline/spacing-vertical': '24px',
 
-  // Stepper Component
+  // Stepper
   '--component/stepper/step-size': '40px',
   '--component/stepper/step-icon-size': '24px',
   '--component/stepper/connector-height': '2px',
   '--component/stepper/label-spacing': '8px',
 
-  // Date Picker Component
+  // Date Picker
   '--component/datepicker/calendar-width': '320px',
   '--component/datepicker/header-height': '56px',
   '--component/datepicker/day-button-size': '40px',
 
-  // Data Table Component (Desktop)
+  // Data Table
   '--component/table/header-height': '50px',
   '--component/table/row-height': '50px',
   '--component/table/dense-row-height': '40px',
   '--component/table/cell-padding-horizontal': '16px',
 
-  // Navigation (Sidenav) Component
+  // Navigation (Sidenav)
   '--component/nav/width-default': '240px',
   '--component/nav/width-slim': '64px',
   '--component/nav/width-wide': '320px',
@@ -688,24 +845,24 @@ export const componentTokens: TokenMap = {
   '--component/nav/icon-size': '24px',
   '--component/nav/icon-spacing': '16px',
 
-  // Breadcrumb Component
+  // Breadcrumb
   '--component/breadcrumb/item-spacing': '8px',
 
-  // Chip Component
+  // Chip
   '--component/chip/height': '32px',
   '--component/chip/padding-horizontal': '12px',
   '--component/chip/icon-size': '18px',
 
-  // Page Heading Component
+  // Page Heading
   '--component/heading/page-title-spacing-bottom': '16px',
   '--component/heading/breadcrumb-spacing-bottom': '8px',
 
-  // Form Field Component
+  // Form Field
   '--component/form/field-spacing-vertical': '24px',
   '--component/form/field-max-width': '500px',
   '--component/form/label-spacing-bottom': '8px',
 
-  // Dialog/Modal Component
+  // Dialog/Modal
   '--component/dialog/min-width': '280px',
   '--component/dialog/max-width': '560px',
   '--component/dialog/title-height': '64px',
@@ -713,20 +870,22 @@ export const componentTokens: TokenMap = {
   '--component/dialog/actions-height': '52px',
   '--component/dialog/actions-spacing': '8px',
 
-  // Tooltip Component
+  // Tooltip
   '--component/tooltip/max-width': '300px',
   '--component/tooltip/padding-horizontal': '8px',
   '--component/tooltip/padding-vertical': '4px',
 
-  // Snackbar Component
+  // Snackbar
   '--component/snackbar/width': '344px',
   '--component/snackbar/min-height': '48px',
   '--component/snackbar/padding-horizontal': '16px',
 
-  // Alert Component
+  // Alert
   '--component/alert/border-radius': '4px',
+  '--component/alert/padding-horizontal': '16px',
+  '--component/alert/padding-vertical': '12px',
 
-  // Slider Component
+  // Slider
   '--component/slider/track-height': '4px',
   '--component/slider/thumb-size': '20px',
 
@@ -734,10 +893,52 @@ export const componentTokens: TokenMap = {
   '--component/app-bar/height-mobile': '56px',
   '--component/app-bar/height-desktop': '64px',
   '--component/app-bar/elevation': '4',
+
+  // Bottom Navigation
+  '--component/bottom-nav/height': '56px',
+  '--component/bottom-nav/action-min-width': '80px',
+  '--component/bottom-nav/action-min-height': '48px',
+
+  // Menu
+  '--component/menu/min-width': '112px',
+  '--component/menu/max-width': '280px',
+  '--component/menu/item-height': '48px',
+  '--component/menu/item-padding-horizontal': '16px',
+
+  // Speed Dial
+  '--component/speed-dial/action-size': '40px',
+
+  // File Upload
+  '--component/file-upload/border-width': '2px',
+  '--component/file-upload/border-style': 'dashed',
+  '--component/file-upload/max-file-size': '10485760',
+  '--component/file-upload/padding': '32px',
+
+  // Transfer List
+  '--component/transfer-list/width': '280px',
+  '--component/transfer-list/height': '320px',
+
+  // Logo
+  '--component/logo/small-width': '80px',
+  '--component/logo/small-height': '23px',
+  '--component/logo/medium-width': '120px',
+  '--component/logo/medium-height': '34px',
+  '--component/logo/large-width': '200px',
+  '--component/logo/large-height': '57px',
+  '--component/wand/small': '32px',
+  '--component/wand/medium': '48px',
+  '--component/wand/large': '64px',
+
+  // Pagination
+  '--component/pagination/item-size': '32px',
+  '--component/pagination/item-gap': '4px',
+
+  // Rating
+  '--component/rating/icon-gap': '4px',
 };
 
 // ============================================================================
-// SECTION 9: TRANSITION/ANIMATION TOKENS — CDS spec
+// SECTION 9: TRANSITION/ANIMATION TOKENS
 // ============================================================================
 
 export const transitionTokens: TokenMap = {
@@ -756,7 +957,7 @@ export const transitionTokens: TokenMap = {
 };
 
 // ============================================================================
-// SECTION 10: BREAKPOINT TOKENS — CDS spec
+// SECTION 10: BREAKPOINT TOKENS
 // ============================================================================
 
 export const breakpointTokens: TokenMap = {
@@ -766,7 +967,6 @@ export const breakpointTokens: TokenMap = {
   '--breakpoint/lg': '1200px',
   '--breakpoint/xl': '1536px',
 
-  // Figma design size breakpoints
   '--breakpoint/figma-mobile': '390px',
   '--breakpoint/figma-tablet': '768px',
   '--breakpoint/figma-desktop': '1440px',
@@ -798,16 +998,16 @@ export const legacyTokenAliases: Record<string, string> = {
 // ============================================================================
 
 export const tokenCategories: TokenCategory[] = [
-  { name: 'Typography', description: 'CDS DM Sans typography system with responsive sizes', tokens: typographyTokens },
-  { name: 'Colors', description: 'CDS Blurple/Slate brand colors + semantic colors', tokens: colorTokens },
-  { name: 'Spacing', description: '4px base unit spacing scale', tokens: spacingTokens },
-  { name: 'Sizing', description: 'CDS responsive component dimensions', tokens: sizingTokens },
-  { name: 'Border Radius', description: 'CDS corner radius system', tokens: borderRadiusTokens },
-  { name: 'Elevation', description: 'Full 24-level Material elevation', tokens: elevationTokens },
-  { name: 'Z-Index', description: 'CDS stacking order', tokens: zIndexTokens },
-  { name: 'Components', description: 'CDS component-specific measurements', tokens: componentTokens },
+  { name: 'Typography', description: 'CDS DM Sans typography — display, heading, body, button, chip, avatar, table, alert, dialog, badge, tooltip, stepper, slider, rating, menu, bottom-nav', tokens: typographyTokens },
+  { name: 'Colors', description: 'CDS Blurple/Slate brand + semantic + grey + state + opacity + component colors', tokens: colorTokens },
+  { name: 'Spacing', description: '4px base unit spacing scale (0–96px)', tokens: spacingTokens },
+  { name: 'Sizing', description: 'CDS responsive component dimensions — button, input, chip, avatar, table, fab, dialog, rating, slider, badge, tab, menu, etc.', tokens: sizingTokens },
+  { name: 'Border Radius', description: 'CDS corner radius system + component-specific radii', tokens: borderRadiusTokens },
+  { name: 'Elevation', description: 'Full 25-level Material elevation (0–24)', tokens: elevationTokens },
+  { name: 'Z-Index', description: 'CDS stacking order for overlays', tokens: zIndexTokens },
+  { name: 'Components', description: 'CDS component-specific measurements — timeline, stepper, datepicker, table, nav, breadcrumb, chip, form, dialog, tooltip, snackbar, alert, slider, app-bar, bottom-nav, menu, file-upload, transfer-list, logo, pagination, rating', tokens: componentTokens },
   { name: 'Transitions', description: 'CDS animation durations and easings', tokens: transitionTokens },
-  { name: 'Breakpoints', description: 'CDS responsive breakpoints', tokens: breakpointTokens },
+  { name: 'Breakpoints', description: 'CDS responsive breakpoints + Figma design sizes', tokens: breakpointTokens },
 ];
 
 export const allTokens: TokenMap = {

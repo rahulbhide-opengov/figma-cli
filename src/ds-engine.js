@@ -436,16 +436,17 @@ export function generateDarkModeCode(collectionName) {
 export function generateFullVariablePushCode() {
   const steps = [];
 
-  steps.push({ label: 'Pushing CDS color variables', code: generateFigmaVariableCode('colors', 'CDS Colors') });
-  steps.push({ label: 'Pushing CDS spacing variables', code: generateFigmaVariableCode('spacing', 'CDS Spacing') });
-  steps.push({ label: 'Pushing CDS sizing variables', code: generateFigmaVariableCode('sizing', 'CDS Sizing') });
-  steps.push({ label: 'Pushing CDS border radius variables', code: generateFigmaVariableCode('borderRadius', 'CDS Border Radius') });
-  steps.push({ label: 'Pushing CDS z-index variables', code: generateFigmaVariableCode('zIndex', 'CDS Z-Index') });
-  steps.push({ label: 'Pushing CDS component variables', code: generateFigmaVariableCode('components', 'CDS Components') });
+  steps.push({ label: 'Pushing CDS color variables (primary, secondary, grey, semantic, state, opacity)', code: generateFigmaVariableCode('colors', 'CDS Colors') });
+  steps.push({ label: 'Pushing CDS spacing variables (4px base, 0–96px)', code: generateFigmaVariableCode('spacing', 'CDS Spacing') });
+  steps.push({ label: 'Pushing CDS sizing variables (button, input, chip, avatar, fab, table, dialog, rating, slider, badge, tab, menu, etc.)', code: generateFigmaVariableCode('sizing', 'CDS Sizing') });
+  steps.push({ label: 'Pushing CDS border radius variables (none–circular + component-specific)', code: generateFigmaVariableCode('borderRadius', 'CDS Border Radius') });
+  steps.push({ label: 'Pushing CDS z-index variables (stepper–tooltip)', code: generateFigmaVariableCode('zIndex', 'CDS Z-Index') });
+  steps.push({ label: 'Pushing CDS component-specific variables (timeline, stepper, datepicker, table, nav, form, dialog, tooltip, snackbar, alert, slider, app-bar, bottom-nav, menu, file-upload, logo, pagination, rating)', code: generateFigmaVariableCode('components', 'CDS Components') });
+  steps.push({ label: 'Pushing CDS breakpoint variables', code: generateFigmaVariableCode('breakpoints', 'CDS Breakpoints') });
 
   const darkCode = generateDarkModeCode('CDS Colors');
   if (darkCode) {
-    steps.push({ label: 'Adding dark mode to CDS Colors', code: darkCode });
+    steps.push({ label: 'Adding dark mode to CDS Colors (text, background, action, primary/secondary states)', code: darkCode });
   }
 
   return steps.filter(s => s.code);

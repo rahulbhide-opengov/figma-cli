@@ -8,6 +8,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from '
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createInterface } from 'readline';
+import { select } from '@inquirer/prompts';
 import { homedir, platform } from 'os';
 import { createServer } from 'http';
 import { FigJamClient } from './figjam-client.js';
@@ -524,15 +525,14 @@ async function ensureFigmaRunning() {
     return { ok: true, status: checkDebugPort(), method: 'pipe' };
   }
 
-  // Tier 5: Nothing worked — guide user
+  // Tier 5: Nothing worked — guide user (NEVER suggest killing/restarting Figma)
   console.log(chalk.yellow('\n  Could not connect to Figma automatically.'));
   console.log(chalk.white('  Please try one of these:\n'));
-  console.log(chalk.cyan('  Option A: ') + chalk.white('Quit Figma, then run this command again'));
-  console.log(chalk.gray('    (We\'ll start Figma with the debug connection enabled)\n'));
-  console.log(chalk.cyan('  Option B: ') + chalk.white('Start Figma manually with debug flag:'));
+  console.log(chalk.cyan('  Option A: ') + chalk.white('Start Figma with the debug flag (if not already running):'));
   console.log(chalk.gray(`    ${getManualStartCommand()}\n`));
-  console.log(chalk.cyan('  Option C: ') + chalk.white('Patch Figma (one-time, requires Full Disk Access):'));
+  console.log(chalk.cyan('  Option B: ') + chalk.white('Patch Figma (one-time, requires Full Disk Access):'));
   console.log(chalk.gray('    node src/index.js init\n'));
+  console.log(chalk.gray('  Note: The CLI will never close or restart Figma.'));
 
   return { ok: false, reason: 'could-not-connect' };
 }
@@ -1424,18 +1424,19 @@ program
       console.log(chalk.bold.cyan('  ┌──────────────────────────────────────────────────────┐'));
       console.log(chalk.bold.cyan('  │  CDS Design System — Push to this Figma file?         │'));
       console.log(chalk.bold.cyan('  └──────────────────────────────────────────────────────┘'));
-      console.log(chalk.white('  This creates 616+ linked variables, text styles, responsive modes,'));
-      console.log(chalk.white('  and 47 components — so every design you create uses the CDS system'));
-      console.log(chalk.white('  and stays in sync when tokens change.'));
-      console.log('');
-      let answer = '';
-      while (!['y', 'yes', 'n', 'no'].includes(answer.trim().toLowerCase())) {
-        answer = await prompt(chalk.yellow('  Push CDS Design System to this file? (y/n): '));
-        if (!['y', 'yes', 'n', 'no'].includes(answer.trim().toLowerCase())) {
-          console.log(chalk.gray('  Please type y or n.'));
-        }
-      }
-      if (['y', 'yes'].includes(answer.trim().toLowerCase())) {
+      console.log(chalk.white('  This creates 500+ linked variables, text styles, responsive'));
+      console.log(chalk.white('  modes, and dark mode — so every design you create uses the'));
+      console.log(chalk.white('  CDS system and stays in sync when tokens change.\n'));
+
+      const answer = await select({
+        message: 'Push CDS Design System to this file?',
+        choices: [
+          { name: 'Yes — push variables, text styles & dark mode', value: 'yes' },
+          { name: 'No — skip for now (I can run "ds setup" later)', value: 'no' },
+        ],
+      });
+
+      if (answer === 'yes') {
         console.log('');
         await runDsSetup({ skipDark: false, skipComponents: true, skipStyles: false });
       } else {

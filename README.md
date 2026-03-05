@@ -136,9 +136,7 @@ Method 2: Pipe mode (works on Figma 126+, no patching needed)
 
 The CLI automatically tries port 9222 and pipe mode. If both fail:
 
-**Option A: Quit Figma, then run `connect` again** (CLI will start Figma with the debug flag)
-
-**Option B: Start Figma manually with the debug flag:**
+**Option A: Start Figma with the debug flag:**
 ```bash
 # macOS
 open -a Figma --args --remote-debugging-port=9222
@@ -202,7 +200,10 @@ Run Command Prompt or PowerShell as Administrator, then run `node src/index.js i
 
 1. Make sure Figma Desktop is running (not the web version)
 2. Check if port 9222 is available: `lsof -i :9222`
-3. Restart Figma: `node src/index.js connect`
+3. Start Figma with the debug flag: `open -a Figma --args --remote-debugging-port=9222`
+4. Then run: `node src/index.js connect`
+
+Note: The CLI will never close or restart Figma.
 
 ---
 

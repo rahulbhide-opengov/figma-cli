@@ -101,12 +101,12 @@ This CLI includes the **CDS (Corporate Design System)** with 322 tokens and 26 r
 
 ### IMPORTANT: Agent Behavior for the CDS Prompt
 
-**DO NOT skip, kill, or bypass the CDS prompt.** When the `connect` command shows the "Push CDS Design System to this file? (y/n)" prompt:
+**DO NOT skip or bypass the CDS prompt.** When the `connect` command shows the "Push CDS Design System to this file?" interactive selector:
 
-1. **WAIT for the user's response** — do NOT kill the process or send input on behalf of the user
+1. **WAIT for the user's response** — do NOT send input on behalf of the user
 2. **Set `block_until_ms` high enough** (at least 120000ms / 2 minutes) so the shell doesn't background while waiting for input
-3. **Only the user decides** — never assume y or n
-4. The prompt will **keep asking** until it gets a valid y/n answer
+3. **Only the user decides** — never assume Yes or No
+4. The user will see a selectable menu with **Yes** and **No** options (arrow keys + Enter)
 
 ### What the user sees after `connect`:
 ```

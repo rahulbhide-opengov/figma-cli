@@ -1,7 +1,7 @@
 # figma-ds-cli
 
 CLI that controls Figma Desktop directly. No API key needed.
-**Has a built-in CDS Design System with 322 tokens and 26 components.**
+**Has a built-in CDS Design System with 322 tokens, 50+ text styles, and 50 component blueprints.**
 
 ## CRITICAL: Natural Language Interface
 
@@ -151,7 +151,7 @@ This one command creates:
 
 3. **Dark mode** added to CDS Colors collection (text, background, action, state colors)
 
-4. **54 CDS components** rendered and converted to Figma Components — Buttons, Forms, Layout, Navigation, Data Display, Feedback, Branding (all linked to variables)
+**Note:** `ds setup` does NOT create component frames in the Figma file by default. Components are created inline when you use `ds create` or build designs — they follow CDS specifications from the component registry and are automatically bound to the pushed variables and styles. Use `--with-components` if you explicitly want component frames in the file.
 
 ### When to run `ds setup`:
 - **First time** you connect to a new Figma file → run it automatically
@@ -163,8 +163,8 @@ This one command creates:
 |------|--------|
 | `--force` | Re-run setup even if already done for this file |
 | `--skip-dark` | Skip dark mode creation |
-| `--skip-components` | Skip component library (only push variables + styles) |
 | `--skip-styles` | Skip text style creation |
+| `--with-components` | Also push component library frames to Figma (off by default) |
 | `--components-only` | Only create the component library (skip variables/styles) |
 
 ### Responsive Modes
@@ -192,7 +192,7 @@ Change a variable value → all components using it update automatically.
 |-----------|---------|
 | "Set up the design system" / "Initialize tokens" / "Push variables" / "Set up everything" | `node src/index.js ds setup` (auto-prompted on first connect) |
 | "Re-run setup" / "Push tokens again" / "Refresh design system" | `node src/index.js ds setup --force` |
-| "Only push variables and styles (no components)" | `node src/index.js ds setup --skip-components` |
+| "Also push component frames to Figma" | `node src/index.js ds setup --with-components` |
 | "Only create components" | `node src/index.js ds setup --components-only` |
 | "Set up without dark mode" | `node src/index.js ds setup --skip-dark` |
 | "Bind this frame to the design system" | `node src/index.js ds bind "Frame Name"` |
@@ -336,7 +336,7 @@ No patching or Full Disk Access is required for the pipe method to work. The CLI
 | "Show spacing scale" | `node src/index.js ds tokens list -c spacing` |
 | "Show typography tokens" | `node src/index.js ds tokens list -c typography` |
 
-**IMPORTANT:** `ds setup` is the ONE command that sets up the entire CDS Design System. See the "One-Command Design System Setup" section above for full details. It creates 616+ variables (with responsive modes), 50+ text styles, dark mode, and 54 CDS components — all linked together. After setup, every component you create is automatically bound to these variables and styles.
+**IMPORTANT:** `ds setup` is the ONE command that sets up the entire CDS Design System. See the "One-Command Design System Setup" section above for full details. It creates 616+ variables (with responsive modes), 50+ text styles, and dark mode. After setup, every design you create via `ds create` follows CDS component specs and is automatically bound to these variables and styles.
 
 ### Token Lookups
 

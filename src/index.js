@@ -1437,11 +1437,11 @@ program
       }
       if (['y', 'yes'].includes(answer.trim().toLowerCase())) {
         console.log('');
-        await runDsSetup({ skipDark: false, skipComponents: false, skipStyles: false });
+        await runDsSetup({ skipDark: false, skipComponents: true, skipStyles: false });
       } else {
         console.log('');
-        console.log(chalk.green('  ✓ No problem! All designs will still use CDS colors, typography,'));
-        console.log(chalk.green('    sizing, and components — they just won\'t be linked to Figma variables.'));
+        console.log(chalk.green('  ✓ No problem! All designs will still follow CDS specs —'));
+        console.log(chalk.green('    they just won\'t be linked to Figma variables.'));
         console.log(chalk.gray('    You can link them anytime later with: ds setup\n'));
       }
     } else {
@@ -4619,7 +4619,7 @@ figjam
  * Called by both `ds setup` command and the post-connect prompt.
  */
 async function runDsSetup(options = {}) {
-  const { skipDark = false, skipComponents = false, skipStyles = false, componentsOnly = false, force = false } = options;
+  const { skipDark = false, skipComponents = true, skipStyles = false, componentsOnly = false, force = false } = options;
 
   // Guard: only run once per file unless forced
   if (!force && isFileSetupDone()) {
@@ -4812,8 +4812,11 @@ async function runDsSetup(options = {}) {
   console.log(chalk.gray('  Responsive modes: Switch between Desktop/Tablet/Mobile in Figma\'s'));
   console.log(chalk.gray('  variable panel to see sizes, spacing, and typography adapt.'));
   console.log('');
-  console.log(chalk.gray('  All new designs will be automatically linked to these variables,'));
-  console.log(chalk.gray('  styles, and components.\n'));
+  console.log(chalk.gray('  All new designs created via "ds create" will follow CDS component'));
+  console.log(chalk.gray('  specs and be linked to these variables and styles.\n'));
+  if (skipComponents) {
+    console.log(chalk.gray('  Tip: Use --with-components to also push component frames to Figma.\n'));
+  }
 }
 
 const ds = program
@@ -5076,10 +5079,10 @@ ds
 // ds setup - ONE COMMAND to set up the entire CDS Design System in Figma
 ds
   .command('setup')
-  .description('Complete CDS design system setup: variables (with responsive Desktop/Tablet/Mobile modes), text styles, dark mode, and component library')
+  .description('Complete CDS design system setup: variables (with responsive Desktop/Tablet/Mobile modes), text styles, and dark mode')
   .option('--skip-dark', 'Skip dark mode creation')
-  .option('--skip-components', 'Skip component library creation')
   .option('--skip-styles', 'Skip text style creation')
+  .option('--with-components', 'Also create component library frames in Figma (off by default)')
   .option('--components-only', 'Only create the component library (skip variables/styles)')
   .option('--force', 'Re-run setup even if already done for this file')
   .action(async (options) => {
@@ -5087,7 +5090,7 @@ ds
     console.log('');
     await runDsSetup({
       skipDark: options.skipDark,
-      skipComponents: options.skipComponents,
+      skipComponents: !options.withComponents,
       skipStyles: options.skipStyles,
       componentsOnly: options.componentsOnly,
       force: options.force,

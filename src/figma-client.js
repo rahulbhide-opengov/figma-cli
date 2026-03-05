@@ -485,10 +485,15 @@ export class FigmaClient {
     const flex = props.flex || 'col';
     const gap = props.gap || 0;
     const p = props.p || props.padding || 0;
-    const px = props.px || p;
-    const py = props.py || p;
-    const align = props.align || 'MIN';
-    const justify = props.justify || 'MIN';
+    const px = props.px !== undefined ? props.px : p;
+    const py = props.py !== undefined ? props.py : p;
+    const pt = props.pt !== undefined ? props.pt : py;
+    const pb = props.pb !== undefined ? props.pb : py;
+    const pl = props.pl !== undefined ? props.pl : px;
+    const pr = props.pr !== undefined ? props.pr : px;
+    const alignMap = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH', between: 'SPACE_BETWEEN' };
+    const align = alignMap[props.items || props.align] || 'MIN';
+    const justify = alignMap[props.justify] || 'MIN';
     const useSmartPos = props.x === undefined;
     const explicitX = props.x || 0;
     const y = props.y || 0;
@@ -499,14 +504,23 @@ export class FigmaClient {
     const hugWidth = hug === 'both' || hug === 'w' || hug === 'width';
     const hugHeight = hug === 'both' || hug === 'h' || hug === 'height';
 
-    // Collect all fonts recursively
-    const fonts = new Set();
+    const weightToStyle = (w) => {
+      if (!w) return 'Regular';
+      const s = String(w).toLowerCase();
+      if (s === '700' || s === 'bold') return 'Bold';
+      if (s === '600' || s === 'semibold') return 'SemiBold';
+      if (s === '500' || s === 'medium') return 'Medium';
+      return 'Regular';
+    };
+
+    // Collect all font family+style combinations recursively
+    const fontCombos = new Set();
     const collectFonts = (items) => {
       items.forEach(item => {
         if (item._type === 'text') {
-          const weight = item.weight || 'regular';
-          const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
-          fonts.add(style);
+          const family = item.font || 'DM Sans';
+          const style = weightToStyle(item.weight);
+          fontCombos.add(`${family}|${style}`);
         } else if (item._type === 'frame' && item._children) {
           collectFonts(item._children);
         }
@@ -514,8 +528,8 @@ export class FigmaClient {
     };
     collectFonts(children);
 
-    const fontLoads = Array.from(fonts)
-      .map(s => `figma.loadFontAsync({family:'Inter',style:'${s}'})`)
+    const fontLoads = Array.from(fontCombos)
+      .map(combo => { const [fam, sty] = combo.split('|'); return `figma.loadFontAsync({family:${JSON.stringify(fam)},style:'${sty}'})`; })
       .join(',');
 
     // Generate child code recursively
@@ -524,15 +538,15 @@ export class FigmaClient {
       return items.map(item => {
         const idx = childCounter++;
         if (item._type === 'text') {
-          const weight = item.weight || 'regular';
-          const style = weight === 'bold' ? 'Bold' : weight === 'medium' ? 'Medium' : weight === 'semibold' ? 'Semi Bold' : 'Regular';
+          const family = item.font || 'DM Sans';
+          const style = weightToStyle(item.weight);
           const size = item.size || 14;
           const color = item.color || '#000000';
           const fillWidth = item.w === 'fill';
 
           return `
         const el${idx} = figma.createText();
-        el${idx}.fontName = {family:'Inter',style:'${style}'};
+        el${idx}.fontName = {family:${JSON.stringify(family)},style:'${style}'};
         el${idx}.fontSize = ${size};
         el${idx}.characters = ${JSON.stringify(item.content)};
         el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(color)}}];
@@ -543,15 +557,20 @@ export class FigmaClient {
           const fName = item.name || 'Nested Frame';
           const fBg = item.bg || item.fill || '#ffffff';
           const fStroke = item.stroke || null;
-          const fRounded = item.rounded || item.radius || 8;
+          const fRounded = item.rounded || item.radius || 0;
           const fFlex = item.flex || 'row';
           const fGap = item.gap || 0;
-          // Default padding for buttons
           const fP = item.p !== undefined ? item.p : (item.padding !== undefined ? item.padding : null);
-          const fPx = item.px !== undefined ? item.px : (fP !== null ? fP : 16);
-          const fPy = item.py !== undefined ? item.py : (fP !== null ? fP : 10);
-          const fAlign = item.align || 'center';
-          const fJustify = item.justify || 'center';
+          const fPx = item.px !== undefined ? item.px : (fP !== null ? fP : 0);
+          const fPy = item.py !== undefined ? item.py : (fP !== null ? fP : 0);
+          const fPt = item.pt !== undefined ? item.pt : fPy;
+          const fPb = item.pb !== undefined ? item.pb : fPy;
+          const fPl = item.pl !== undefined ? item.pl : fPx;
+          const fPr = item.pr !== undefined ? item.pr : fPx;
+          const fGrow = item.grow;
+          const fStrokeW = item.strokeWidth || (fStroke ? 1 : 0);
+          const fAlign = item.items || item.align || 'start';
+          const fJustify = item.justify || 'start';
           // Clip defaults to false for nested frames
           const fClip = item.clip === 'true' || item.clip === true;
 
@@ -565,10 +584,8 @@ export class FigmaClient {
           const fillWidth = item.w === 'fill';
           const fillHeight = item.h === 'fill';
 
-          // Map align/justify to Figma values
-          const alignMap = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH' };
-          const fAlignVal = alignMap[fAlign] || 'CENTER';
-          const fJustifyVal = alignMap[fJustify] || 'CENTER';
+          const fAlignVal = alignMap[fAlign] || 'MIN';
+          const fJustifyVal = alignMap[fJustify] || 'MIN';
 
           const nestedChildren = item._children ? generateChildCode(item._children, `el${idx}`) : '';
 
@@ -578,21 +595,22 @@ export class FigmaClient {
         el${idx}.layoutMode = '${fFlex === 'row' ? 'HORIZONTAL' : 'VERTICAL'}';
         el${idx}.primaryAxisSizingMode = '${hasWidth && !fillWidth ? 'FIXED' : 'AUTO'}';
         el${idx}.counterAxisSizingMode = '${hasHeight && !fillHeight ? 'FIXED' : 'AUTO'}';
-        ${hasWidth && !fillWidth || hasHeight && !fillHeight ? `el${idx}.resize(${hasWidth ? fWidth : 100}, ${hasHeight ? fHeight : 40});` : ''}
-        ${fillWidth ? `el${idx}.layoutSizingHorizontal = 'FILL';` : ''}
-        ${fillHeight ? `el${idx}.layoutSizingVertical = 'FILL';` : ''}
+        ${(hasWidth && !fillWidth) || (hasHeight && !fillHeight) ? `el${idx}.resize(${hasWidth && !fillWidth ? fWidth : 100}, ${hasHeight && !fillHeight ? fHeight : 40});` : ''}
         el${idx}.itemSpacing = ${fGap};
-        el${idx}.paddingTop = ${fPy};
-        el${idx}.paddingBottom = ${fPy};
-        el${idx}.paddingLeft = ${fPx};
-        el${idx}.paddingRight = ${fPx};
+        el${idx}.paddingTop = ${fPt};
+        el${idx}.paddingBottom = ${fPb};
+        el${idx}.paddingLeft = ${fPl};
+        el${idx}.paddingRight = ${fPr};
         el${idx}.cornerRadius = ${fRounded};
         el${idx}.fills = [{type:'SOLID',color:${this.hexToRgbCode(fBg)}}];
-        ${fStroke ? `el${idx}.strokes = [{type:'SOLID',color:${this.hexToRgbCode(fStroke)}}]; el${idx}.strokeWeight = 1;` : ''}
+        ${fStroke ? `el${idx}.strokes = [{type:'SOLID',color:${this.hexToRgbCode(fStroke)}}]; el${idx}.strokeWeight = ${fStrokeW};` : ''}
         el${idx}.primaryAxisAlignItems = '${fJustifyVal}';
         el${idx}.counterAxisAlignItems = '${fAlignVal}';
         el${idx}.clipsContent = ${fClip};
         ${parentVar}.appendChild(el${idx});
+        ${fillWidth ? `el${idx}.layoutSizingHorizontal = 'FILL';` : ''}
+        ${fillHeight ? `el${idx}.layoutSizingVertical = 'FILL';` : ''}
+        ${fGrow ? `el${idx}.layoutGrow = ${fGrow};` : ''}
         ${nestedChildren}`;
         } else if (item._type === 'rect') {
           // Rectangle element
@@ -667,10 +685,8 @@ export class FigmaClient {
 
     const childCode = generateChildCode(children, 'frame');
 
-    // Map align/justify to Figma values for root frame
-    const alignMap = { start: 'MIN', center: 'CENTER', end: 'MAX', stretch: 'STRETCH' };
-    const alignVal = alignMap[align] || 'MIN';
-    const justifyVal = alignMap[justify] || 'MIN';
+    const alignVal = align;
+    const justifyVal = justify;
 
     // Smart positioning code
     const smartPosCode = useSmartPos ? `
@@ -702,10 +718,10 @@ export class FigmaClient {
         ${stroke ? `frame.strokes = [{type:'SOLID',color:${this.hexToRgbCode(stroke)}}]; frame.strokeWeight = 1;` : ''}
         frame.layoutMode = '${flex === 'row' ? 'HORIZONTAL' : 'VERTICAL'}';
         frame.itemSpacing = ${gap};
-        frame.paddingTop = ${py};
-        frame.paddingBottom = ${py};
-        frame.paddingLeft = ${px};
-        frame.paddingRight = ${px};
+        frame.paddingTop = ${pt};
+        frame.paddingBottom = ${pb};
+        frame.paddingLeft = ${pl};
+        frame.paddingRight = ${pr};
         frame.primaryAxisAlignItems = '${justifyVal}';
         frame.counterAxisAlignItems = '${alignVal}';
         frame.primaryAxisSizingMode = '${hugWidth ? 'AUTO' : 'FIXED'}';

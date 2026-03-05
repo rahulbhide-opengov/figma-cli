@@ -454,12 +454,72 @@ export function generateFullSetupSteps() {
   return steps;
 }
 
+/**
+ * Generate code that links text nodes to CDS text styles.
+ * Matches by fontSize + fontWeight (style name) to find the best text style.
+ */
+export function generateTextStyleBindingCode(nodeId) {
+  return `(function() {
+  var node = figma.getNodeById(${JSON.stringify(nodeId)});
+  if (!node) {
+    var allNodes = figma.currentPage.children;
+    for (var i = allNodes.length - 1; i >= 0; i--) {
+      if (allNodes[i].type === 'FRAME' || allNodes[i].type === 'COMPONENT') {
+        node = allNodes[i];
+        break;
+      }
+    }
+  }
+  if (!node) return 'No frame found';
+
+  var styles = figma.getLocalTextStyles();
+  if (styles.length === 0) return 'No text styles in file';
+
+  // Build lookup: "fontSize|styleName" → textStyle
+  // Prefer more specific matches (body, heading, button) over generic ones
+  var lookup = {};
+  var priority = { 'body': 10, 'heading': 9, 'button': 8, 'subtitle': 7, 'display': 6, 'alert': 5, 'input': 4 };
+  styles.forEach(function(s) {
+    var key = s.fontSize + '|' + (s.fontName ? s.fontName.style : 'Regular');
+    var cat = s.name.split('/')[1] || '';
+    var p = priority[cat] || 0;
+    if (!lookup[key] || p > (lookup[key]._priority || 0)) {
+      lookup[key] = s;
+      lookup[key]._priority = p;
+    }
+  });
+
+  var textNodes = [];
+  function collectText(n) {
+    if (n.type === 'TEXT') textNodes.push(n);
+    if (n.children) n.children.forEach(collectText);
+  }
+  collectText(node);
+
+  var bound = 0;
+  for (var i = 0; i < textNodes.length; i++) {
+    var t = textNodes[i];
+    try {
+      var styleName = t.fontName ? t.fontName.style : 'Regular';
+      var key = t.fontSize + '|' + styleName;
+      var style = lookup[key];
+      if (style) {
+        t.textStyleId = style.id;
+        bound++;
+      }
+    } catch(e) {}
+  }
+  return 'Linked ' + bound + ' of ' + textNodes.length + ' text nodes to CDS text styles';
+})()`;
+}
+
 export default {
   buildReverseColorMap,
   buildTypographyMap,
   generateTextStylesCode,
   generateBindingCode,
   generateTypographyFixCode,
+  generateTextStyleBindingCode,
   generateComponentConversionCode,
   generateFullSetupSteps,
 };

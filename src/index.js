@@ -4772,6 +4772,22 @@ async function runDsSetup(options = {}) {
         try {
           figmaEvalSync(dsBinder.generateBindingCode('*'));
         } catch {}
+
+        step4.text = `Step ${currentStep}/${totalSteps}: Linking text to CDS text styles...`;
+        try {
+          const allFrameIds = figmaEvalSync(`(function() {
+  return figma.currentPage.children
+    .filter(n => n.type === 'FRAME' || n.type === 'COMPONENT')
+    .map(n => n.id).join(',');
+})()`);
+          if (allFrameIds) {
+            for (const fid of String(allFrameIds).split(',')) {
+              if (fid.trim()) {
+                try { figmaEvalSync(dsBinder.generateTextStyleBindingCode(fid.trim())); } catch {}
+              }
+            }
+          }
+        } catch {}
       }
 
       summary.components = rendered;
@@ -4985,6 +5001,20 @@ ds
         }
       } catch (e) {
         bindSpinner.info('  Binding skipped (run "ds setup" to push tokens first)');
+      }
+
+      // Link text nodes to CDS text styles
+      const styleSpinner = ora('  Linking to CDS text styles...').start();
+      try {
+        const styleCode = dsBinder.generateTextStyleBindingCode(result.id);
+        const styleResult = figmaEvalSync(styleCode);
+        if (styleResult && String(styleResult).includes('Linked')) {
+          styleSpinner.succeed(`  ${String(styleResult).trim()}`);
+        } else {
+          styleSpinner.info('  No text styles found (run "ds setup" first)');
+        }
+      } catch {
+        styleSpinner.info('  Text style linking skipped');
       }
     } catch (e) {
       console.log(chalk.red(`\n  Failed to create ${comp.name}: ${e.stderr || e.message}\n`));

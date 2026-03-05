@@ -38,7 +38,7 @@ Only if the user explicitly says "I don't have a file", "create a new one", or "
 
 **Do NOT offer "new file" as a first option.** Always ask for a URL first. Creating a new file is the fallback, not the default.
 
-## CRITICAL: Session File Lock
+## CRITICAL: Session File Lock — Always Use the Figma URL
 
 **Once a file is connected via URL, ALL commands for the rest of this conversation go to that same file.** Do NOT ask again. Do NOT switch files unless the user explicitly says:
 - "Switch to a different file"
@@ -46,6 +46,8 @@ Only if the user explicitly says "I don't have a file", "create a new one", or "
 - "Create a new file for this"
 
 If the user asks to create a button, then a card, then a full page — all go into the same file. Never re-ask, never re-connect, never lose track.
+
+**IMPORTANT:** The CLI always targets the file specified by the URL, NOT the currently active/open Figma file. The `connect` command activates the correct Figma tab automatically, and every subsequent command (render, eval, ds create) ensures that tab stays active. Even if the user switches to another file manually in Figma, the CLI will switch back to the URL-specified file before executing commands.
 
 ### Example Conversations
 

@@ -8,11 +8,28 @@
  */
 
 import { createServer } from 'http';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { FigmaClient } from './figma-client.js';
 
 const PORT = parseInt(process.env.DAEMON_PORT) || 3456;
 const FIGMA_PORT = parseInt(process.env.FIGMA_DEBUG_PORT) || 9222;
 FigmaClient.defaultPort = FIGMA_PORT;
+
+function getTargetFileKey() {
+  try {
+    const configPath = join(homedir(), '.figma-ds-cli', 'config.json');
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf8'));
+      if (config.lastFileUrl) {
+        const m = config.lastFileUrl.match(/figma\.com\/(design|file)\/([a-zA-Z0-9]+)/);
+        if (m) return m[2];
+      }
+    }
+  } catch {}
+  return null;
+}
 
 let client = null;
 let isConnecting = false;
@@ -58,8 +75,9 @@ async function getClient() {
   isConnecting = true;
   try {
     client = new FigmaClient();
-    await client.connect();
-    console.log('[daemon] Connected to Figma');
+    const fileKey = getTargetFileKey();
+    await client.connect(null, fileKey);
+    console.log('[daemon] Connected to Figma' + (fileKey ? ` (target: ${fileKey})` : ''));
   } finally {
     isConnecting = false;
   }

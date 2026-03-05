@@ -127,6 +127,88 @@ async function fastRender(jsx) {
   }
 }
 
+/**
+ * Render JSX in Figma via our daemon (targets the correct file).
+ * Falls back to figma-use render if daemon unavailable.
+ * Returns { id, name } of the created frame.
+ */
+function renderJsx(jsx, { x, y, parent } = {}) {
+  ensureTargetFileActive();
+
+  // Inject x/y into the JSX opening tag if provided
+  let modifiedJsx = jsx;
+  if (x !== undefined || y !== undefined) {
+    modifiedJsx = modifiedJsx.replace(/<Frame\s/, (m) => {
+      let inject = '';
+      if (x !== undefined) inject += ` x={${x}}`;
+      if (y !== undefined) inject += ` y={${y}}`;
+      return m + inject.trim() + ' ';
+    });
+  }
+
+  // Try our daemon first (targets the correct file)
+  if (isDaemonRunning()) {
+    try {
+      const payload = JSON.stringify({ action: 'render', jsx: modifiedJsx });
+      const payloadFile = `/tmp/figma-render-${Date.now()}.json`;
+      writeFileSync(payloadFile, payload);
+      const result = execSync(
+        `curl -s -X POST http://127.0.0.1:3456/exec -H "Content-Type: application/json" -d @${payloadFile}`,
+        { encoding: 'utf8', timeout: 30000 }
+      );
+      try { unlinkSync(payloadFile); } catch {}
+      const data = JSON.parse(result);
+      if (data.result && !data.error) return data.result;
+    } catch {}
+  }
+
+  // Fallback: figma-use render
+  let cmd = 'npx figma-use render --stdin --json';
+  if (parent) cmd += ` --parent "${parent}"`;
+  if (x !== undefined) cmd += ` --x ${x}`;
+  if (y !== undefined) cmd += ` --y ${y}`;
+
+  const output = execSync(cmd, {
+    input: jsx,
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 30000
+  });
+  return JSON.parse(output.trim());
+}
+
+/**
+ * Render multiple JSX strings via our daemon (targets the correct file).
+ * Falls back to figma-use render-batch if daemon unavailable.
+ */
+function renderJsxBatch(jsxArray) {
+  ensureTargetFileActive();
+
+  if (isDaemonRunning()) {
+    try {
+      const payload = JSON.stringify({ action: 'render-batch', jsxArray });
+      const payloadFile = `/tmp/figma-render-batch-${Date.now()}.json`;
+      writeFileSync(payloadFile, payload);
+      const result = execSync(
+        `curl -s -X POST http://127.0.0.1:3456/exec -H "Content-Type: application/json" -d @${payloadFile}`,
+        { encoding: 'utf8', timeout: 60000 }
+      );
+      try { unlinkSync(payloadFile); } catch {}
+      const data = JSON.parse(result);
+      if (data.result && !data.error) return data.result;
+    } catch {}
+  }
+
+  // Fallback: figma-use render-batch
+  const output = execSync('npx figma-use render-batch --stdin --json', {
+    input: JSON.stringify(jsxArray),
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 60000
+  });
+  return JSON.parse(output.trim());
+}
+
 // Start daemon in background
 function startDaemon(forceRestart = false) {
   // If force restart, always kill existing daemon first
@@ -497,11 +579,16 @@ async function navigateToFigmaFile(url) {
     });
     const pages = JSON.parse(result);
 
-    // Check if this file is already open
+    // Check if this file is already open — activate it
     const alreadyOpen = pages.find(p => p.url?.includes(parsed.fileKey));
     if (alreadyOpen) {
       const title = alreadyOpen.title.replace(' – Figma', '');
-      console.log(chalk.green(`  ✓ File already open: ${title}`));
+      try {
+        execSync(`curl -s http://localhost:${figmaPort()}/json/activate/${alreadyOpen.id}`, {
+          stdio: 'pipe', timeout: 2000
+        });
+      } catch {}
+      console.log(chalk.green(`  ✓ File already open: ${title} (activated)`));
       return true;
     }
 
@@ -536,8 +623,13 @@ async function navigateToFigmaFile(url) {
       const updated = JSON.parse(check);
       const found = updated.find(p => p.url?.includes(parsed.fileKey));
       if (found) {
+        try {
+          execSync(`curl -s http://localhost:${figmaPort()}/json/activate/${found.id}`, {
+            stdio: 'pipe', timeout: 2000
+          });
+        } catch {}
         const title = found.title.replace(' – Figma', '');
-        spinner.succeed(`Opened: ${title}`);
+        spinner.succeed(`Opened: ${title} (activated)`);
         return true;
       }
       spinner.warn('File navigation sent, but could not verify it opened');
@@ -551,6 +643,38 @@ async function navigateToFigmaFile(url) {
     console.log(chalk.yellow(`  Could not navigate: ${e.message}`));
     return false;
   }
+}
+
+/**
+ * Ensure the Figma tab matching the user-provided URL is the active tab.
+ * Called before render/eval to guarantee commands target the right file.
+ * Uses CDP /json/activate/:id to switch tabs.
+ * Caches per-session so we only send the activate command once.
+ */
+let _targetActivated = false;
+function ensureTargetFileActive() {
+  if (_targetActivated) return;
+
+  const config = loadConfig();
+  const url = config.lastFileUrl;
+  if (!url) return;
+
+  const parsed = parseFigmaUrl(url);
+  if (!parsed) return;
+
+  try {
+    const result = execSync(`curl -s http://localhost:${figmaPort()}/json`, {
+      encoding: 'utf8', stdio: 'pipe', timeout: 2000
+    });
+    const pages = JSON.parse(result);
+    const target = pages.find(p => p.url?.includes(parsed.fileKey));
+    if (target) {
+      execSync(`curl -s http://localhost:${figmaPort()}/json/activate/${target.id}`, {
+        stdio: 'pipe', timeout: 2000
+      });
+      _targetActivated = true;
+    }
+  } catch {}
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -671,6 +795,16 @@ function figmaEvalSync(code) {
   const tempFile = join('/tmp', `figma-eval-${Date.now()}.mjs`);
   const resultFile = join('/tmp', `figma-result-${Date.now()}.json`);
 
+  // Get target fileKey from config so direct CDP connects to the right tab
+  let targetFileKey = 'null';
+  try {
+    const cfg = loadConfig();
+    if (cfg.lastFileUrl) {
+      const m = cfg.lastFileUrl.match(/figma\.com\/(design|file)\/([a-zA-Z0-9]+)/);
+      if (m) targetFileKey = JSON.stringify(m[2]);
+    }
+  } catch {}
+
   const script = `
     import { FigmaClient } from '${join(process.cwd(), 'src/figma-client.js').replace(/\\/g, '/')}';
     import { writeFileSync } from 'fs';
@@ -678,7 +812,7 @@ function figmaEvalSync(code) {
     (async () => {
       try {
         const client = new FigmaClient();
-        await client.connect();
+        await client.connect(null, ${targetFileKey});
         const result = await client.eval(${JSON.stringify(code)});
         writeFileSync('${resultFile}', JSON.stringify({ success: true, result }));
         client.close();
@@ -813,10 +947,16 @@ function figmaUse(args, options = {}) {
 async function checkConnection() {
   // Try detected debug port first
   const connected = await FigmaClient.isConnected(figmaPort());
-  if (connected) return true;
+  if (connected) {
+    ensureTargetFileActive();
+    return true;
+  }
 
   // Try figma-use (pipe mode or daemon)
-  if (checkFigmaUseStatus()) return true;
+  if (checkFigmaUseStatus()) {
+    ensureTargetFileActive();
+    return true;
+  }
 
   console.log(chalk.red('\n✗ Not connected to Figma\n'));
   console.log(chalk.white('  Run the connect command first:'));
@@ -829,10 +969,14 @@ function checkConnectionSync() {
   // Try detected debug port first
   try {
     execSync(`curl -s http://localhost:${figmaPort()}/json > /dev/null`, { stdio: 'pipe', timeout: 2000 });
+    ensureTargetFileActive();
     return true;
   } catch {
     // Try figma-use as fallback
-    if (checkFigmaUseStatus()) return true;
+    if (checkFigmaUseStatus()) {
+      ensureTargetFileActive();
+      return true;
+    }
 
     console.log(chalk.red('\n✗ Not connected to Figma\n'));
     console.log(chalk.white('  Run the connect command first:'));
@@ -1239,6 +1383,7 @@ program
       if (navigated) {
         config.lastFileUrl = url;
         saveConfig(config);
+        _targetActivated = false; // Reset so ensureTargetFileActive re-activates
       } else {
         console.log(chalk.yellow('  Could not navigate to the file automatically.'));
         console.log(chalk.cyan(`  Please open it in Figma: ${url}\n`));
@@ -1255,22 +1400,22 @@ program
       }
     }
 
-    // Start daemon if not running
-    if (!isDaemonRunning()) {
-      const daemonSpinner = ora('Starting speed daemon...').start();
-      try {
-        startDaemon(true);
-        await new Promise(r => setTimeout(r, 1500));
-        if (isDaemonRunning()) {
-          daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');
-        } else {
-          daemonSpinner.warn('Daemon failed to start, commands will be slower');
-        }
-      } catch (e) {
-        daemonSpinner.warn('Daemon failed: ' + e.message);
+    // (Re)start daemons to ensure they connect to the target file
+    // Our daemon reads the config fileKey on connect
+    if (isDaemonRunning()) {
+      stopDaemon();
+    }
+    const daemonSpinner = ora('Starting speed daemon...').start();
+    try {
+      startDaemon(true);
+      await new Promise(r => setTimeout(r, 1500));
+      if (isDaemonRunning()) {
+        daemonSpinner.succeed('Speed daemon running (commands are now 10x faster)');
+      } else {
+        daemonSpinner.warn('Daemon failed to start, commands will be slower');
       }
-    } else {
-      console.log(chalk.green('  ✓ Speed daemon already running'));
+    } catch (e) {
+      daemonSpinner.warn('Daemon failed: ' + e.message);
     }
 
     // After connection, check if CDS setup has been done for this file
@@ -3871,7 +4016,6 @@ program
   .action(async (jsx, options) => {
     await checkConnection();
     try {
-      // Calculate smart position if not specified
       let posX = options.x;
       let posY = options.y !== undefined ? options.y : 0;
 
@@ -3879,20 +4023,7 @@ program
         posX = getNextFreeX();
       }
 
-      // Use figma-use render directly - it has full JSX support
-      let cmd = 'npx figma-use render --stdin --json';
-      if (options.parent) cmd += ` --parent "${options.parent}"`;
-      if (posX !== undefined) cmd += ` --x ${posX}`;
-      cmd += ` --y ${posY}`;
-
-      const output = execSync(cmd, {
-        input: jsx,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 30000
-      });
-
-      const result = JSON.parse(output.trim());
+      const result = renderJsx(jsx, { x: posX, y: posY, parent: options.parent });
       console.log(chalk.green('✓ Rendered: ' + result.id));
       if (result.name) console.log(chalk.gray('  name: ' + result.name));
     } catch (e) {
@@ -3922,19 +4053,10 @@ program
 
       for (const jsx of jsxArray) {
         try {
-          const cmd = `npx figma-use render --stdin --json --x ${currentX} --y ${currentY}`;
-          const output = execSync(cmd, {
-            input: jsx,
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeout: 30000
-          });
-
-          const result = JSON.parse(output.trim());
+          const result = renderJsx(jsx, { x: currentX, y: currentY });
           results.push(result);
           console.log(chalk.green('✓ Rendered: ' + result.id + (result.name ? ' (' + result.name + ')' : '')));
 
-          // Get size of created frame for next position
           try {
             if (vertical) {
               const height = figmaEvalSync(`(function() { const n = figma.getNodeById('${result.id}'); return n ? n.height : 200; })()`);
@@ -4605,12 +4727,7 @@ async function runDsSetup(options = {}) {
         if (jsxBatch.length > 0) {
           step4.text = `Step ${currentStep}/${totalSteps}: Creating components ${i + 1}–${Math.min(i + batchSize, coreComponents.length)} of ${coreComponents.length}...`;
           try {
-            execSync(`npx figma-use render-batch --stdin --json`, {
-              input: JSON.stringify(jsxBatch),
-              encoding: 'utf8',
-              stdio: ['pipe', 'pipe', 'pipe'],
-              timeout: 60000
-            });
+            renderJsxBatch(jsxBatch);
             rendered += jsxBatch.length;
           } catch {}
         }
@@ -4802,15 +4919,7 @@ ds
         }
         componentRegistry.setBreakpoint('desktop');
 
-        const batchJson = JSON.stringify(jsxList);
-        const cmd = `npx figma-use render-batch --stdin --json`;
-        let posX = getNextFreeX();
-        const output = execSync(cmd, {
-          input: batchJson,
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          timeout: 60000
-        });
+        renderJsxBatch(jsxList);
 
         spinner.succeed(`${comp.name} created at Desktop, Tablet, Mobile`);
         console.log(chalk.gray('  3 responsive variants placed side by side'));
@@ -4849,16 +4958,7 @@ ds
       const bpLabel = options.breakpoint ? ` (${options.breakpoint})` : '';
       const spinner = ora(`Creating ${comp.name}${bpLabel}...`).start();
 
-      let posX = getNextFreeX();
-      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
-      const output = execSync(cmd, {
-        input: jsx,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 30000
-      });
-
-      const result = JSON.parse(output.trim());
+      const result = renderJsx(jsx, { x: getNextFreeX(), y: 0 });
       spinner.succeed(`${comp.name}${bpLabel} created: ${result.id}`);
       if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
 
@@ -4917,14 +5017,7 @@ ds
 
       for (const jsx of jsxItems) {
         try {
-          const cmd = `npx figma-use render --stdin --json --x ${currentX} --y ${currentY}`;
-          const output = execSync(cmd, {
-            input: jsx,
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeout: 30000
-          });
-          const result = JSON.parse(output.trim());
+          const result = renderJsx(jsx, { x: currentX, y: currentY });
           count++;
 
           try {
@@ -5231,10 +5324,7 @@ ds
       componentRegistry.setBreakpoint('desktop');
 
       try {
-        const batchJson = JSON.stringify(jsxList);
-        const posX = getNextFreeX();
-        const cmd = `npx figma-use render-batch --stdin --json`;
-        const output = execSync(cmd, { input: batchJson, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 90000 });
+        renderJsxBatch(jsxList);
         spinner.succeed(`${pageType} page created at Desktop (1440), Tablet (768), Mobile (390)`);
         return;
       } catch (e) {
@@ -5249,15 +5339,7 @@ ds
     try {
       const jsx = componentRegistry.buildPage(config);
       if (bp !== 'desktop') componentRegistry.setBreakpoint('desktop');
-      const posX = getNextFreeX();
-      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
-      const output = execSync(cmd, {
-        input: jsx,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 60000
-      });
-      const result = JSON.parse(output.trim());
+      const result = renderJsx(jsx, { x: getNextFreeX(), y: 0 });
       spinner.succeed(`${pageType} page${bpLabel} created: ${result.id}`);
       if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
     } catch (e) {
@@ -5289,15 +5371,7 @@ ds
       }
 
       const jsx = componentRegistry.buildPage(config);
-      const posX = getNextFreeX();
-      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
-      const output = execSync(cmd, {
-        input: jsx,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 60000
-      });
-      const result = JSON.parse(output.trim());
+      const result = renderJsx(jsx, { x: getNextFreeX(), y: 0 });
       spinner.succeed(`Screen created: ${result.id}`);
       if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
     } catch (e) {
@@ -5314,15 +5388,7 @@ ds
     const spinner = ora('Rendering screen...').start();
 
     try {
-      const posX = getNextFreeX();
-      const cmd = `npx figma-use render --stdin --json --x ${posX} --y 0`;
-      const output = execSync(cmd, {
-        input: jsx,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 60000
-      });
-      const result = JSON.parse(output.trim());
+      const result = renderJsx(jsx, { x: getNextFreeX(), y: 0 });
       spinner.succeed(`Screen created: ${result.id}`);
       if (result.name) console.log(chalk.gray(`  name: ${result.name}`));
     } catch (e) {

@@ -49,19 +49,31 @@ export class FigmaClient {
   /**
    * Connect to a Figma design file
    */
-  async connect(pageTitle = null) {
+  async connect(pageTitle = null, targetFileKey = null) {
     const response = await fetch(`http://localhost:${this.port}/json`);
     const pages = await response.json();
 
     // Find design/file pages (not feed, home, etc.)
     let page;
-    if (pageTitle) {
+
+    // Priority 1: Match by fileKey (from stored URL)
+    if (targetFileKey) {
+      page = pages.find(p =>
+        p.url?.includes(targetFileKey) &&
+        (p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file'))
+      );
+    }
+
+    // Priority 2: Match by page title
+    if (!page && pageTitle) {
       page = pages.find(p =>
         p.title.includes(pageTitle) &&
         (p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file'))
       );
-    } else {
-      // First design/file page (like figma-use does)
+    }
+
+    // Priority 3: First design/file page
+    if (!page) {
       page = pages.find(p =>
         p.url?.includes('figma.com/design') || p.url?.includes('figma.com/file')
       );
@@ -708,7 +720,12 @@ export class FigmaClient {
   }
 
   hexToRgbCode(hex) {
-    return `{r:${parseInt(hex.slice(1,3),16)/255},g:${parseInt(hex.slice(3,5),16)/255},b:${parseInt(hex.slice(5,7),16)/255}}`;
+    let h = hex.startsWith('#') ? hex.slice(1) : hex;
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    const r = parseInt(h.slice(0,2),16)/255 || 0;
+    const g = parseInt(h.slice(2,4),16)/255 || 0;
+    const b = parseInt(h.slice(4,6),16)/255 || 0;
+    return `{r:${r},g:${g},b:${b}}`;
   }
 
   // ============ Node Operations ============

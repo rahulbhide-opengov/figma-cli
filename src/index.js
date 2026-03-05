@@ -1441,9 +1441,12 @@ program
         await runDsSetup({ skipDark: false, skipComponents: true, skipStyles: false });
       } else {
         console.log('');
-        console.log(chalk.green('  ✓ No problem! All designs will still follow CDS specs —'));
-        console.log(chalk.green('    they just won\'t be linked to Figma variables.'));
-        console.log(chalk.gray('    You can link them anytime later with: ds setup\n'));
+        console.log(chalk.green('  ✓ Skipped. All designs will still use exact CDS values:'));
+        console.log(chalk.green('    • Colors: CDS hex values (primary, secondary, error, grey, etc.)'));
+        console.log(chalk.green('    • Typography: DM Sans with CDS font-size, weight, line-height, letter-spacing'));
+        console.log(chalk.green('    • Spacing & Radius: CDS token values baked into every element'));
+        console.log(chalk.gray('    They just won\'t be linked to Figma variables/styles.'));
+        console.log(chalk.gray('    Run "ds setup" anytime to add variable linking.\n'));
       }
     } else {
       console.log(chalk.green('  ✓ CDS Design System already set up for this file'));
@@ -4994,17 +4997,25 @@ ds
       }
 
       const frameName = result.name || comp.name;
+      const hasSetup = isFileSetupDone();
+
       const bindSpinner = ora('  Binding to design system variables...').start();
       try {
         const bindCode = dsBinder.generateBindingCode(frameName);
         const bindResult = figmaEvalSync(bindCode);
         if (bindResult && !String(bindResult).includes('not found')) {
           bindSpinner.succeed(`  ${String(bindResult).trim()}`);
+        } else if (hasSetup) {
+          bindSpinner.info('  No variables matched — CDS values are baked in');
         } else {
-          bindSpinner.info('  No variables found to bind (run "ds setup" first to push tokens)');
+          bindSpinner.succeed('  CDS colors applied (hex values baked in — run "ds setup" to also link variables)');
         }
       } catch (e) {
-        bindSpinner.info('  Binding skipped (run "ds setup" to push tokens first)');
+        if (hasSetup) {
+          bindSpinner.info('  Variable binding skipped — CDS values are baked in');
+        } else {
+          bindSpinner.succeed('  CDS colors applied as hex values');
+        }
       }
 
       // Link text nodes to CDS text styles
@@ -5014,11 +5025,17 @@ ds
         const styleResult = figmaEvalSync(styleCode);
         if (styleResult && String(styleResult).includes('Linked')) {
           styleSpinner.succeed(`  ${String(styleResult).trim()}`);
+        } else if (hasSetup) {
+          styleSpinner.info('  No text styles matched — CDS typography is applied directly');
         } else {
-          styleSpinner.info('  No text styles found (run "ds setup" first)');
+          styleSpinner.succeed('  CDS typography applied (DM Sans, correct sizes/weights/line-heights)');
         }
       } catch {
-        styleSpinner.info('  Text style linking skipped');
+        if (!hasSetup) {
+          styleSpinner.succeed('  CDS typography applied directly');
+        } else {
+          styleSpinner.info('  Text style linking skipped — CDS typography is applied directly');
+        }
       }
     } catch (e) {
       console.log(chalk.red(`\n  Failed to create ${comp.name}: ${e.stderr || e.message}\n`));

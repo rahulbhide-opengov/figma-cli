@@ -120,11 +120,17 @@ This CLI includes the **CDS (Corporate Design System)** with 322 tokens and 26 r
   Push CDS Design System to this file? (y/n):
 ```
 
-### If user says YES:
-The full setup runs automatically — 616+ variables, text styles, dark mode, 47 components all pushed and linked in the Figma file.
+### If user selects YES:
+The full setup runs automatically — 500+ variables, text styles, and dark mode all pushed and linked in the Figma file.
 
-### If user says NO:
-**Designs still use CDS values.** All colors, typography, sizing, spacing, and component styling come from the CDS token system. They just won't be linked to Figma variables — the values are baked into the rendered elements. The user can link them anytime later:
+### If user selects NO:
+**Every design is still 100% CDS-compliant.** All values come directly from the CDS token spec:
+- **Colors:** Exact CDS hex values (primary #1565C0, error #D32F2F, grey scale, semantic colors, etc.)
+- **Typography:** DM Sans with correct font-size, font-weight, line-height, and letter-spacing per CDS style
+- **Spacing & Sizing:** CDS token values for padding, gap, button heights, input sizes, border-radius
+- **Components:** Built to CDS specs (correct structure, nesting, auto-layout settings)
+
+The only difference: values are **baked in** as hex/px, not linked to Figma variables/styles. Changing a variable won't auto-propagate. The user can link them anytime later:
 
 ```bash
 node src/index.js ds setup

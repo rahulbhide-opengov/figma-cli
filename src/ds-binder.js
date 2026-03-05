@@ -26,6 +26,17 @@ export function buildReverseColorMap() {
   const { categories } = loadTokens();
   const map = {};
 
+  const semanticPrefixes = [
+    'text/', 'background/', 'primary/main', 'primary/light', 'primary/dark',
+    'primary/contrast', 'secondary/main', 'secondary/light', 'secondary/dark',
+    'secondary/contrast', 'error/', 'warning/', 'success/', 'info/',
+    'action/', 'divider', 'border/',
+  ];
+
+  function isSemantic(varName) {
+    return semanticPrefixes.some(p => varName.includes(p));
+  }
+
   for (const catName of ['colors', 'components']) {
     const cat = categories[catName] || {};
     for (const [key, val] of Object.entries(cat)) {
@@ -33,7 +44,9 @@ export function buildReverseColorMap() {
       if (hex && hex.startsWith('#')) {
         const varName = key.replace(/^--/, '');
         const normalized = hex.toLowerCase();
-        if (!map[normalized]) map[normalized] = varName;
+        if (!map[normalized] || (isSemantic(varName) && !isSemantic(map[normalized]))) {
+          map[normalized] = varName;
+        }
       }
     }
   }
@@ -51,43 +64,32 @@ export function buildTypographyMap() {
   const typo = categories.typography || {};
   const styles = {};
 
+  // Order matters: later entries override earlier ones for same fontSize|weight key.
+  // Most-specific/rare styles first, most-common styles LAST so they win collisions.
   const styleGroups = [
-    // Headings
-    'heading/h1', 'heading/h2', 'heading/h3', 'heading/h4', 'heading/h5', 'heading/h6',
-    // Display
-    'display/1', 'display/2', 'display/3', 'display/4', 'display/5',
-    // Body (including body3/body4 as extra-small)
-    'body/large', 'body/medium', 'body/small', 'body/extra-small',
-    // Subtitles
-    'subtitle/1', 'subtitle/2',
-    // Input
+    // Rare/specific styles first (lose collisions)
+    'rating/icon',
+    'slider/value-label',
+    'stepper/label',
+    'bottom-nav/actions', 'bottom-nav/default',
+    'menu-item/default', 'menu-item/dense',
+    'helper-text',
+    'badge', 'tooltip',
+    'avatar/large', 'avatar/medium', 'avatar/small',
+    'chip/large', 'chip/medium', 'chip/small',
+    'table/header', 'table/cell', 'table/footer',
+    'alert/title', 'alert/description',
+    'dialog/title', 'dialog/content',
     'input/label/small', 'input/label/medium', 'input/label/large',
     'input/value/small', 'input/value/medium', 'input/value/large',
     'input/helper', 'input/description',
-    // Caption & Overline
     'caption', 'overline',
-    // Button
+    // Common styles LAST (win collisions for same fontSize|weight)
+    'subtitle/1', 'subtitle/2',
     'button/large', 'button/medium', 'button/small',
-    // Chip
-    'chip/large', 'chip/medium', 'chip/small',
-    // Avatar
-    'avatar/large', 'avatar/medium', 'avatar/small',
-    // Table
-    'table/header', 'table/cell', 'table/footer',
-    // Alert
-    'alert/title', 'alert/description',
-    // Dialog
-    'dialog/title', 'dialog/content',
-    // Badge, Tooltip, Stepper, Slider
-    'badge', 'tooltip', 'stepper/label', 'slider/value-label',
-    // Rating
-    'rating/icon',
-    // Menu Item
-    'menu-item/default', 'menu-item/dense',
-    // Bottom Nav
-    'bottom-nav/actions', 'bottom-nav/default',
-    // Helper text
-    'helper-text',
+    'body/large', 'body/medium', 'body/small', 'body/extra-small',
+    'display/1', 'display/2', 'display/3', 'display/4', 'display/5',
+    'heading/h1', 'heading/h2', 'heading/h3', 'heading/h4', 'heading/h5', 'heading/h6',
   ];
 
   for (const styleName of styleGroups) {

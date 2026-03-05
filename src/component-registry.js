@@ -600,7 +600,7 @@ components.snackbar = {
       ? `\n  <Text size={14} weight="500" color="${c.primary}">${actionLabel}</Text>`
       : '';
 
-    return `<Frame name="Snackbar" w={${w}} h={${minH}} flex="row" items="center" px={${pxVal}} bg="#323232" rounded={4} gap={8}>
+    return `<Frame name="Snackbar" w={${w}} h={${minH}} flex="row" items="center" px={${pxVal}} bg="${c.grey900}" rounded={4} gap={8}>
   <Text size={14} color="#ffffff" w="fill">${message}</Text>${actionJsx}
 </Frame>`;
   }

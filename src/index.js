@@ -597,6 +597,46 @@ function saveConfig(config) {
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
+/**
+ * Get a unique key for the currently connected Figma file (URL or title).
+ * Returns null if no file is open.
+ */
+function getCurrentFileKey() {
+  const config = loadConfig();
+  if (config.lastFileUrl) return config.lastFileUrl;
+  try {
+    const status = checkDebugPort();
+    if (status.hasDesignFile && status.designFile.title) {
+      return status.designFile.title.replace(' – Figma', '').trim();
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Check if CDS design system has already been set up in the current Figma file.
+ */
+function isFileSetupDone() {
+  const fileKey = getCurrentFileKey();
+  if (!fileKey) return false;
+  const config = loadConfig();
+  return (config.setupDoneFiles || []).includes(fileKey);
+}
+
+/**
+ * Mark the current Figma file as having CDS design system set up.
+ */
+function markFileSetupDone() {
+  const fileKey = getCurrentFileKey();
+  if (!fileKey) return;
+  const config = loadConfig();
+  if (!config.setupDoneFiles) config.setupDoneFiles = [];
+  if (!config.setupDoneFiles.includes(fileKey)) {
+    config.setupDoneFiles.push(fileKey);
+    saveConfig(config);
+  }
+}
+
 // Singleton FigmaClient instance
 let _figmaClient = null;
 
@@ -1246,7 +1286,28 @@ program
       console.log(chalk.green('  ✓ Speed daemon already running'));
     }
 
-    console.log(chalk.green('\n  Ready! Share a Figma file link and start creating.\n'));
+    // After connection, check if CDS setup has been done for this file
+    if (!isFileSetupDone()) {
+      console.log('');
+      console.log(chalk.bold.cyan('  ┌──────────────────────────────────────────────────────┐'));
+      console.log(chalk.bold.cyan('  │  CDS Design System — Push to this Figma file?         │'));
+      console.log(chalk.bold.cyan('  └──────────────────────────────────────────────────────┘'));
+      console.log(chalk.white('  This creates 616+ linked variables, text styles, responsive modes,'));
+      console.log(chalk.white('  and 47 components — so every design you create uses the CDS system'));
+      console.log(chalk.white('  and stays in sync when tokens change.'));
+      console.log('');
+      const answer = await prompt(chalk.yellow('  Push CDS Design System to this file? (y/n): '));
+      if (answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes') {
+        console.log('');
+        await runDsSetup({ skipDark: false, skipComponents: false, skipStyles: false });
+      } else {
+        console.log(chalk.gray('\n  Skipped. You can run it later with: ds setup\n'));
+      }
+    } else {
+      console.log(chalk.green('  ✓ CDS Design System already set up for this file'));
+    }
+
+    console.log(chalk.green('\n  Ready! Start creating designs.\n'));
   });
 
 // ============ VARIABLES ============
@@ -4435,6 +4496,175 @@ figjam
 // DESIGN SYSTEM COMMANDS (ds)
 // ============================================================================
 
+/**
+ * Reusable function that runs the full CDS Design System setup.
+ * Called by both `ds setup` command and the post-connect prompt.
+ */
+async function runDsSetup(options = {}) {
+  const { skipDark = false, skipComponents = false, skipStyles = false, componentsOnly = false, force = false } = options;
+
+  // Guard: only run once per file unless forced
+  if (!force && isFileSetupDone()) {
+    console.log(chalk.green('  ✓ CDS Design System already set up for this file.'));
+    console.log(chalk.gray('  Use --force to re-run setup.\n'));
+    return;
+  }
+
+  let totalSteps = 0;
+  if (componentsOnly) {
+    totalSteps = 1;
+  } else {
+    totalSteps = 1;
+    if (!skipStyles) totalSteps++;
+    if (!skipDark) totalSteps++;
+    if (!skipComponents) totalSteps++;
+  }
+  let currentStep = 0;
+
+  console.log(chalk.bold.cyan('  ╔══════════════════════════════════════════════════╗'));
+  console.log(chalk.bold.cyan('  ║     CDS Design System — Full Setup               ║'));
+  console.log(chalk.bold.cyan('  ╚══════════════════════════════════════════════════╝\n'));
+
+  const summary = { variables: 0, textStyles: 0, darkMode: 0, components: 0 };
+
+  if (!componentsOnly) {
+    currentStep++;
+    const step1 = ora(`Step ${currentStep}/${totalSteps}: Pushing CDS variables with Desktop/Tablet/Mobile modes...`).start();
+    const varSteps = dsEngine.generateFullVariablePushCode();
+    for (const vs of varSteps) {
+      step1.text = `Step ${currentStep}/${totalSteps}: ${vs.label}`;
+      try {
+        const result = figmaEvalSync(vs.code);
+        if (result) {
+          const match = String(result).match(/(?:Created|Updated) (\d+)/);
+          if (match) summary.variables += parseInt(match[1]);
+        }
+      } catch {}
+    }
+    step1.succeed(`Step ${currentStep}/${totalSteps}: ${summary.variables} CDS variables created (responsive modes: Desktop/Tablet/Mobile)`);
+    console.log(chalk.gray('    Collections: Colors, Spacing, Sizing, Typography, Border Radius, Z-Index, Components, Breakpoints'));
+
+    if (!skipStyles) {
+      currentStep++;
+      const step2 = ora(`Step ${currentStep}/${totalSteps}: Creating CDS text styles (DM Sans)...`).start();
+      try {
+        const textCode = dsBinder.generateTextStylesCode();
+        const textResult = figmaEvalSync(textCode);
+        const textMatch = String(textResult).match(/Created (\d+)/);
+        if (textMatch) summary.textStyles = parseInt(textMatch[1]);
+        step2.succeed(`Step ${currentStep}/${totalSteps}: ${summary.textStyles} CDS text styles created`);
+        console.log(chalk.gray('    Styles: display(1-5), heading(h1-h6), body(lg/md/sm/xs), subtitle, button, chip, avatar, table, alert, dialog, badge, tooltip, etc.'));
+      } catch (e) {
+        step2.warn(`Step ${currentStep}/${totalSteps}: Text styles skipped — ${e.message}`);
+      }
+    }
+
+    if (!skipDark) {
+      currentStep++;
+      const step3 = ora(`Step ${currentStep}/${totalSteps}: Adding dark mode to CDS Colors...`).start();
+      try {
+        const darkCode = dsEngine.generateDarkModeCode('CDS Colors');
+        if (darkCode) {
+          const darkResult = figmaEvalSync(darkCode);
+          const darkMatch = String(darkResult).match(/Updated (\d+)/);
+          if (darkMatch) summary.darkMode = parseInt(darkMatch[1]);
+          step3.succeed(`Step ${currentStep}/${totalSteps}: ${summary.darkMode} dark mode color values set`);
+        } else {
+          step3.info(`Step ${currentStep}/${totalSteps}: No dark mode tokens found`);
+        }
+      } catch (e) {
+        step3.warn(`Step ${currentStep}/${totalSteps}: Dark mode skipped — ${e.message}`);
+      }
+    }
+  }
+
+  if (!skipComponents) {
+    currentStep++;
+    const step4 = ora(`Step ${currentStep}/${totalSteps}: Creating CDS component library...`).start();
+
+    try {
+      const allComponents = componentRegistry.listComponents();
+      const coreComponents = allComponents.filter(c =>
+        !['loginform', 'dashboard', 'profilecard', 'contactform', 'pageheading', 'sectionheading', 'formlayout'].includes(c.key)
+      );
+
+      const batchSize = 8;
+      let rendered = 0;
+
+      for (let i = 0; i < coreComponents.length; i += batchSize) {
+        const batch = coreComponents.slice(i, i + batchSize);
+        const jsxBatch = [];
+        for (const compInfo of batch) {
+          try {
+            const comp = componentRegistry.getComponent(compInfo.key);
+            if (comp) jsxBatch.push(comp.render({}));
+          } catch {}
+        }
+
+        if (jsxBatch.length > 0) {
+          step4.text = `Step ${currentStep}/${totalSteps}: Creating components ${i + 1}–${Math.min(i + batchSize, coreComponents.length)} of ${coreComponents.length}...`;
+          try {
+            execSync(`npx figma-use render-batch --stdin --json`, {
+              input: JSON.stringify(jsxBatch),
+              encoding: 'utf8',
+              stdio: ['pipe', 'pipe', 'pipe'],
+              timeout: 60000
+            });
+            rendered += jsxBatch.length;
+          } catch {}
+        }
+      }
+
+      if (rendered > 0) {
+        step4.text = `Step ${currentStep}/${totalSteps}: Converting to Figma components...`;
+        try {
+          figmaEvalSync(`(function() {
+  const page = figma.currentPage;
+  let converted = 0;
+  const seen = new Set();
+  for (const child of page.children) {
+    if (child.type === 'FRAME' && !seen.has(child.name)) {
+      seen.add(child.name);
+      figma.createComponentFromNode(child);
+      converted++;
+    }
+  }
+  return 'Converted ' + converted;
+})()`);
+        } catch {}
+
+        step4.text = `Step ${currentStep}/${totalSteps}: Binding components to CDS variables...`;
+        try {
+          figmaEvalSync(dsBinder.generateBindingCode('*'));
+        } catch {}
+      }
+
+      summary.components = rendered;
+      step4.succeed(`Step ${currentStep}/${totalSteps}: ${rendered} CDS components created and converted to Figma components`);
+      console.log(chalk.gray('    Categories: Buttons, Forms, Layout, Navigation, Data, Feedback, Branding'));
+    } catch (e) {
+      step4.warn(`Step ${currentStep}/${totalSteps}: Component library failed — ${e.message}`);
+    }
+  }
+
+  // Mark this file as set up
+  markFileSetupDone();
+
+  console.log('');
+  console.log(chalk.bold.green('  ✓ CDS Design System setup complete!\n'));
+  console.log(chalk.white('  Summary:'));
+  if (summary.variables > 0)   console.log(chalk.cyan(`    • ${summary.variables} Figma variables (with Desktop/Tablet/Mobile responsive modes)`));
+  if (summary.textStyles > 0)  console.log(chalk.cyan(`    • ${summary.textStyles} CDS text styles (DM Sans)`));
+  if (summary.darkMode > 0)    console.log(chalk.cyan(`    • ${summary.darkMode} dark mode color values`));
+  if (summary.components > 0)  console.log(chalk.cyan(`    • ${summary.components} CDS components (as Figma components)`));
+  console.log('');
+  console.log(chalk.gray('  Responsive modes: Switch between Desktop/Tablet/Mobile in Figma\'s'));
+  console.log(chalk.gray('  variable panel to see sizes, spacing, and typography adapt.'));
+  console.log('');
+  console.log(chalk.gray('  All new designs will be automatically linked to these variables,'));
+  console.log(chalk.gray('  styles, and components.\n'));
+}
+
 const ds = program
   .command('ds')
   .description('Design system commands - create components, push tokens, build pages using your DS');
@@ -4681,182 +4911,17 @@ ds
   .option('--skip-components', 'Skip component library creation')
   .option('--skip-styles', 'Skip text style creation')
   .option('--components-only', 'Only create the component library (skip variables/styles)')
+  .option('--force', 'Re-run setup even if already done for this file')
   .action(async (options) => {
     await checkConnection();
-
-    let totalSteps = 0;
-    if (options.componentsOnly) {
-      totalSteps = 1;
-    } else {
-      totalSteps = 1; // variables
-      if (!options.skipStyles) totalSteps++;
-      if (!options.skipDark) totalSteps++;
-      if (!options.skipComponents) totalSteps++;
-    }
-    let currentStep = 0;
-
-    console.log(chalk.bold.cyan('\n  ╔══════════════════════════════════════════════════╗'));
-    console.log(chalk.bold.cyan('  ║     CDS Design System — Full Setup               ║'));
-    console.log(chalk.bold.cyan('  ╚══════════════════════════════════════════════════╝\n'));
-
-    const summary = { variables: 0, textStyles: 0, darkMode: 0, components: 0 };
-
-    // ──────────────────────────────────────────────
-    // STEP 1: Push all CDS variables (with responsive modes)
-    // ──────────────────────────────────────────────
-    if (!options.componentsOnly) {
-      currentStep++;
-      const step1 = ora(`Step ${currentStep}/${totalSteps}: Pushing CDS variables with Desktop/Tablet/Mobile modes...`).start();
-      const varSteps = dsEngine.generateFullVariablePushCode();
-      for (const vs of varSteps) {
-        step1.text = `Step ${currentStep}/${totalSteps}: ${vs.label}`;
-        try {
-          const result = figmaEvalSync(vs.code);
-          if (result) {
-            const match = String(result).match(/(?:Created|Updated) (\d+)/);
-            if (match) summary.variables += parseInt(match[1]);
-          }
-        } catch {}
-      }
-      step1.succeed(`Step ${currentStep}/${totalSteps}: ${summary.variables} CDS variables created (responsive modes: Desktop/Tablet/Mobile)`);
-      console.log(chalk.gray('    Collections: Colors, Spacing, Sizing, Typography, Border Radius, Z-Index, Components, Breakpoints'));
-
-      // ──────────────────────────────────────────────
-      // STEP 2: Create text styles (DM Sans)
-      // ──────────────────────────────────────────────
-      if (!options.skipStyles) {
-        currentStep++;
-        const step2 = ora(`Step ${currentStep}/${totalSteps}: Creating CDS text styles (DM Sans)...`).start();
-        try {
-          const textCode = dsBinder.generateTextStylesCode();
-          const textResult = figmaEvalSync(textCode);
-          const textMatch = String(textResult).match(/Created (\d+)/);
-          if (textMatch) summary.textStyles = parseInt(textMatch[1]);
-          step2.succeed(`Step ${currentStep}/${totalSteps}: ${summary.textStyles} CDS text styles created`);
-          console.log(chalk.gray('    Styles: display(1-5), heading(h1-h6), body(lg/md/sm/xs), subtitle, button, chip, avatar, table, alert, dialog, badge, tooltip, etc.'));
-        } catch (e) {
-          step2.warn(`Step ${currentStep}/${totalSteps}: Text styles skipped — ${e.message}`);
-        }
-      }
-
-      // ──────────────────────────────────────────────
-      // STEP 3: Dark mode
-      // ──────────────────────────────────────────────
-      if (!options.skipDark) {
-        currentStep++;
-        const step3 = ora(`Step ${currentStep}/${totalSteps}: Adding dark mode to CDS Colors...`).start();
-        try {
-          const darkCode = dsEngine.generateDarkModeCode('CDS Colors');
-          if (darkCode) {
-            const darkResult = figmaEvalSync(darkCode);
-            const darkMatch = String(darkResult).match(/Updated (\d+)/);
-            if (darkMatch) summary.darkMode = parseInt(darkMatch[1]);
-            step3.succeed(`Step ${currentStep}/${totalSteps}: ${summary.darkMode} dark mode color values set`);
-          } else {
-            step3.info(`Step ${currentStep}/${totalSteps}: No dark mode tokens found`);
-          }
-        } catch (e) {
-          step3.warn(`Step ${currentStep}/${totalSteps}: Dark mode skipped — ${e.message}`);
-        }
-      }
-    }
-
-    // ──────────────────────────────────────────────
-    // STEP 4: Create component library page
-    // ──────────────────────────────────────────────
-    if (!options.skipComponents) {
-      currentStep++;
-      const step4 = ora(`Step ${currentStep}/${totalSteps}: Creating CDS component library...`).start();
-
-      try {
-        const allComponents = componentRegistry.listComponents();
-        const coreComponents = allComponents.filter(c =>
-          !['loginform', 'dashboard', 'profilecard', 'contactform', 'pageheading', 'sectionheading', 'formlayout'].includes(c.key)
-        );
-
-        const batchSize = 8;
-        let rendered = 0;
-
-        for (let i = 0; i < coreComponents.length; i += batchSize) {
-          const batch = coreComponents.slice(i, i + batchSize);
-          const jsxBatch = [];
-          for (const compInfo of batch) {
-            try {
-              const comp = componentRegistry.getComponent(compInfo.key);
-              if (comp) {
-                const jsx = comp.render({});
-                jsxBatch.push(jsx);
-              }
-            } catch {}
-          }
-
-          if (jsxBatch.length > 0) {
-            step4.text = `Step ${currentStep}/${totalSteps}: Creating components ${i + 1}–${Math.min(i + batchSize, coreComponents.length)} of ${coreComponents.length}...`;
-            try {
-              const batchJson = JSON.stringify(jsxBatch);
-              execSync(`npx figma-use render-batch --stdin --json`, {
-                input: batchJson,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-                timeout: 60000
-              });
-              rendered += jsxBatch.length;
-            } catch {}
-          }
-        }
-
-        // Convert rendered frames to Figma Components
-        if (rendered > 0) {
-          step4.text = `Step ${currentStep}/${totalSteps}: Converting to Figma components...`;
-          try {
-            const convertCode = `(function() {
-  const page = figma.currentPage;
-  let converted = 0;
-  const seen = new Set();
-  for (const child of page.children) {
-    if (child.type === 'FRAME' && !seen.has(child.name)) {
-      seen.add(child.name);
-      const comp = figma.createComponentFromNode(child);
-      converted++;
-    }
-  }
-  return 'Converted ' + converted + ' frames to components';
-})()`;
-            figmaEvalSync(convertCode);
-          } catch {}
-
-          // Bind all components to design system variables
-          step4.text = `Step ${currentStep}/${totalSteps}: Binding components to CDS variables...`;
-          try {
-            const bindAllCode = dsBinder.generateBindingCode('*');
-            figmaEvalSync(bindAllCode);
-          } catch {}
-        }
-
-        summary.components = rendered;
-        step4.succeed(`Step ${currentStep}/${totalSteps}: ${rendered} CDS components created and converted to Figma components`);
-        console.log(chalk.gray('    Categories: Buttons, Forms, Layout, Navigation, Data, Feedback, Branding'));
-      } catch (e) {
-        step4.warn(`Step ${currentStep}/${totalSteps}: Component library failed — ${e.message}`);
-      }
-    }
-
-    // ──────────────────────────────────────────────
-    // Summary
-    // ──────────────────────────────────────────────
     console.log('');
-    console.log(chalk.bold.green('  ✓ CDS Design System setup complete!\n'));
-    console.log(chalk.white('  Summary:'));
-    if (summary.variables > 0)   console.log(chalk.cyan(`    • ${summary.variables} Figma variables (with Desktop/Tablet/Mobile responsive modes)`));
-    if (summary.textStyles > 0)  console.log(chalk.cyan(`    • ${summary.textStyles} CDS text styles (DM Sans)`));
-    if (summary.darkMode > 0)    console.log(chalk.cyan(`    • ${summary.darkMode} dark mode color values`));
-    if (summary.components > 0)  console.log(chalk.cyan(`    • ${summary.components} CDS components (as Figma components)`));
-    console.log('');
-    console.log(chalk.gray('  Responsive modes: Switch between Desktop/Tablet/Mobile in Figma\'s'));
-    console.log(chalk.gray('  variable panel to see sizes, spacing, and typography adapt.'));
-    console.log('');
-    console.log(chalk.gray('  All new designs will be automatically linked to these variables,'));
-    console.log(chalk.gray('  styles, and components.\n'));
+    await runDsSetup({
+      skipDark: options.skipDark,
+      skipComponents: options.skipComponents,
+      skipStyles: options.skipStyles,
+      componentsOnly: options.componentsOnly,
+      force: options.force,
+    });
   });
 
 // ds bind [frameName] - manually bind a frame to design system variables

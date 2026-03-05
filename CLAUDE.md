@@ -93,12 +93,31 @@ This CLI includes the **CDS (Corporate Design System)** with 322 tokens and 26 r
 
 ---
 
-## CRITICAL: One-Command Design System Setup
+## CRITICAL: One-Command Design System Setup (Auto-Prompted)
 
-**`ds setup` is the single command that sets up EVERYTHING in the Figma file.** Run it once per file, and the entire CDS design system is ready — variables, styles, dark mode, responsive modes, and component library.
+**The CLI automatically asks the user** whether to push the CDS Design System when connecting to a Figma file for the first time. This happens once per file — the CLI tracks which files have been set up and won't ask again.
+
+**What the user sees after `connect`:**
+```
+  ┌──────────────────────────────────────────────────────┐
+  │  CDS Design System — Push to this Figma file?         │
+  └──────────────────────────────────────────────────────┘
+  This creates 616+ linked variables, text styles, responsive modes,
+  and 47 components — so every design you create uses the CDS system
+  and stays in sync when tokens change.
+
+  Push CDS Design System to this file? (y/n):
+```
+
+If the user says **yes**, the full setup runs automatically. If **no**, they can run it later manually:
 
 ```bash
 node src/index.js ds setup
+```
+
+**This runs only once per file.** The CLI remembers which files have been set up. To re-run:
+```bash
+node src/index.js ds setup --force
 ```
 
 This one command creates:
@@ -127,6 +146,7 @@ This one command creates:
 ### Options
 | Flag | Effect |
 |------|--------|
+| `--force` | Re-run setup even if already done for this file |
 | `--skip-dark` | Skip dark mode creation |
 | `--skip-components` | Skip component library (only push variables + styles) |
 | `--skip-styles` | Skip text style creation |
@@ -155,7 +175,8 @@ Change a variable value → all components using it update automatically.
 
 | User says | You run |
 |-----------|---------|
-| "Set up the design system" / "Initialize tokens" / "Push variables" / "Set up everything" | `node src/index.js ds setup` |
+| "Set up the design system" / "Initialize tokens" / "Push variables" / "Set up everything" | `node src/index.js ds setup` (auto-prompted on first connect) |
+| "Re-run setup" / "Push tokens again" / "Refresh design system" | `node src/index.js ds setup --force` |
 | "Only push variables and styles (no components)" | `node src/index.js ds setup --skip-components` |
 | "Only create components" | `node src/index.js ds setup --components-only` |
 | "Set up without dark mode" | `node src/index.js ds setup --skip-dark` |
